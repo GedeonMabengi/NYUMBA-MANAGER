@@ -1,0 +1,4184 @@
+# Système de Gestion Immobilière et Mobilière
+
+Je vais vous accompagner étape par étape dans la conception de ce système.
+
+---
+
+## 1. Parcours Utilisateur
+
+### 1.1 Parcours Administrateur (Gestionnaire de l'application)
+
+L'administrateur accède au système via une interface dédiée après authentification. Son rôle principal consiste à configurer les éléments fondamentaux du système. Il commence par gérer les types de biens en ajoutant des catégories comme "Maison", "Appartement", "Parking", "Terrain", "Local commercial" ou "Véhicule". Il peut également modifier ou désactiver ces types selon les besoins. L'administrateur supervise aussi l'ensemble des bailleurs inscrits sur la plateforme et peut consulter les statistiques globales du système.
+
+### 1.2 Parcours Bailleur
+
+**Inscription et connexion** : Le bailleur s'inscrit sur la plateforme en fournissant ses informations personnelles (nom, prénom, email, téléphone). Il peut ensuite associer un ou plusieurs avocats à son compte en renseignant leurs coordonnées (nom, email, téléphone). Une fois inscrit, il accède à son tableau de bord personnel.
+
+**Gestion des biens** : Depuis son tableau de bord, le bailleur peut ajouter un nouveau bien. Il sélectionne d'abord le type de bien parmi la liste proposée par le système. Selon le type choisi, le formulaire s'adapte : pour un bien immobilier, il doit renseigner une adresse complète ; pour un bien mobilier, la localisation reste optionnelle. Il attribue un nom au bien et peut ajouter une description. L'enregistrement du bien déclenche automatiquement une notification vers ses avocats associés si le bien est destiné à la location.
+
+**Attribution d'un locataire** : Lorsqu'un bailleur souhaite louer un bien, il sélectionne le bien concerné et accède au formulaire d'attribution. Il renseigne les informations du locataire : nom complet, numéro de téléphone, email, et toute information complémentaire jugée utile. L'étape cruciale consiste à télécharger le contrat de bail, soit depuis un fichier existant, soit en capturant une photo du document. La validation de l'attribution déclenche une notification vers les avocats du bailleur.
+
+**Fin de location** : Le bailleur peut à tout moment mettre fin à une location. Cette action libère le bien et archive les informations du locataire précédent. Une notification est également envoyée aux avocats.
+
+### 1.3 Parcours Avocat
+
+**Accès au système** : L'avocat reçoit une invitation par email lorsqu'un bailleur l'associe à son compte. Il peut créer son compte ou se connecter s'il en possède déjà un. Un avocat peut être associé à plusieurs bailleurs.
+
+**Consultation et notifications** : L'avocat accède à un tableau de bord présentant tous ses clients bailleurs. Il visualise en temps réel les événements récents : nouveaux biens mis en location, nouvelles attributions de locataires, fins de location. Chaque événement est également notifié par email. L'avocat peut consulter les détails de chaque bien, les informations des locataires et télécharger les contrats de bail associés.
+
+---
+
+## 2. Organisation de la Base de Données
+
+### 2.1 Schéma Relationnel
+
+```
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│     users       │       │  property_types │       │   properties    │
+├─────────────────┤       ├─────────────────┤       ├─────────────────┤
+│ id              │       │ id              │       │ id              │
+│ name            │       │ name            │       │ name            │
+│ email           │       │ slug            │       │ description     │
+│ password        │       │ requires_address│       │ property_type_id│──┐
+│ phone           │       │ is_active       │       │ user_id (owner) │──┼─┐
+│ role            │       │ created_at      │       │ address         │  │ │
+│ email_verified  │       │ updated_at      │       │ city            │  │ │
+│ created_at      │       └─────────────────┘       │ postal_code     │  │ │
+│ updated_at      │                                 │ country         │  │ │
+└────────┬────────┘                                 │ is_for_rent     │  │ │
+         │                                          │ status          │  │ │
+         │                                          │ created_at      │  │ │
+         │                                          │ updated_at      │  │ │
+         │                                          └─────────────────┘  │ │
+         │                                                    ▲          │ │
+         │                                                    │          │ │
+         │         ┌─────────────────┐              ┌─────────┴─────────┐│ │
+         │         │ bailleur_avocat │              │     rentals       ││ │
+         │         ├─────────────────┤              ├───────────────────┤│ │
+         │         │ id              │              │ id                ││ │
+         ├────────►│ bailleur_id     │              │ property_id       │◄┘ │
+         │         │ avocat_id       │              │ tenant_id         │───┼─┐
+         │         │ created_at      │              │ start_date        │   │ │
+         │         │ updated_at      │              │ end_date          │   │ │
+         │         └─────────────────┘              │ rent_amount       │   │ │
+         │                                          │ status            │   │ │
+         │                                          │ created_at        │   │ │
+         │         ┌─────────────────┐              │ updated_at        │   │ │
+         │         │    tenants      │              └───────────────────┘   │ │
+         │         ├─────────────────┤                        ▲             │ │
+         │         │ id              │                        │             │ │
+         └────────►│ user_id(créé par│                        │             │ │
+                   │ first_name      │◄───────────────────────┼─────────────┘ │
+                   │ last_name       │                        │               │
+                   │ email           │              ┌─────────┴─────────┐     │
+                   │ phone           │              │    documents      │     │
+                   │ address         │              ├───────────────────┤     │
+                   │ notes           │              │ id                │     │
+                   │ created_at      │              │ rental_id         │     │
+                   │ updated_at      │              │ name              │     │
+                   └─────────────────┘              │ file_path         │     │
+                                                    │ file_type         │     │
+                                                    │ uploaded_by       │─────┘
+         ┌─────────────────┐                        │ created_at        │
+         │  notifications  │                        │ updated_at        │
+         ├─────────────────┤                        └───────────────────┘
+         │ id              │
+         │ user_id         │
+         │ type            │
+         │ title           │
+         │ message         │
+         │ data (JSON)     │
+         │ read_at         │
+         │ emailed_at      │
+         │ created_at      │
+         │ updated_at      │
+         └─────────────────┘
+```
+
+### 2.2 Description des Tables et Relations
+
+**Table `users`** : Stocke tous les utilisateurs du système (administrateurs, bailleurs, avocats). Le champ `role` distingue le type d'utilisateur avec les valeurs possibles : "admin", "bailleur", "avocat".
+
+**Table `property_types`** : Contient les types de biens configurés par l'administrateur. Le champ `requires_address` indique si une adresse est obligatoire pour ce type de bien (true pour les immobiliers, false pour les mobiliers).
+
+**Table `properties`** : Représente les biens. Chaque bien appartient à un bailleur (`user_id`) et possède un type (`property_type_id`). Les champs d'adresse sont conditionnellement requis selon le type.
+
+**Table `bailleur_avocat`** : Table pivot permettant l'association many-to-many entre bailleurs et avocats.
+
+**Table `tenants`** : Stocke les informations des locataires. Un locataire est créé par un bailleur (`user_id`).
+
+**Table `rentals`** : Représente une location, liant un bien à un locataire avec les dates et conditions.
+
+**Table `documents`** : Stocke les références aux documents uploadés (contrats de bail principalement).
+
+**Table `notifications`** : Gère les notifications internes et par email.
+
+---
+
+## 3. Migrations Laravel
+
+```php
+<?php
+// database/migrations/2024_01_01_000001_create_users_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->string('phone')->nullable();
+            $table->enum('role', ['admin', 'bailleur', 'avocat'])->default('bailleur');
+            $table->boolean('is_active')->default(true);
+            $table->rememberToken();
+            $table->timestamps();
+        });
+
+        Schema::create('password_reset_tokens', function (Blueprint $table) {
+            $table->string('email')->primary();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
+    }
+};
+```
+
+```php
+<?php
+// database/migrations/2024_01_01_000002_create_property_types_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('property_types', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->text('description')->nullable();
+            $table->boolean('requires_address')->default(true);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('property_types');
+    }
+};
+```
+
+```php
+<?php
+// database/migrations/2024_01_01_000003_create_properties_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('properties', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->foreignId('property_type_id')->constrained()->onDelete('restrict');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade'); // bailleur
+            $table->string('address')->nullable();
+            $table->string('city')->nullable();
+            $table->string('postal_code')->nullable();
+            $table->string('country')->nullable()->default('France');
+            $table->boolean('is_for_rent')->default(false);
+            $table->enum('status', ['available', 'rented', 'unavailable'])->default('available');
+            $table->decimal('surface', 10, 2)->nullable();
+            $table->integer('rooms')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('properties');
+    }
+};
+```
+
+```php
+<?php
+// database/migrations/2024_01_01_000004_create_bailleur_avocat_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('bailleur_avocat', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('bailleur_id')->constrained('users')->onDelete('cascade');
+            $table->foreignId('avocat_id')->constrained('users')->onDelete('cascade');
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+
+            $table->unique(['bailleur_id', 'avocat_id']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('bailleur_avocat');
+    }
+};
+```
+
+```php
+<?php
+// database/migrations/2024_01_01_000005_create_tenants_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('tenants', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade'); // créé par (bailleur)
+            $table->string('first_name');
+            $table->string('last_name');
+            $table->string('email')->nullable();
+            $table->string('phone');
+            $table->string('address')->nullable();
+            $table->string('city')->nullable();
+            $table->string('postal_code')->nullable();
+            $table->string('id_card_number')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('tenants');
+    }
+};
+```
+
+```php
+<?php
+// database/migrations/2024_01_01_000006_create_rentals_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('rentals', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('property_id')->constrained()->onDelete('cascade');
+            $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
+            $table->date('start_date');
+            $table->date('end_date')->nullable();
+            $table->decimal('rent_amount', 10, 2);
+            $table->decimal('deposit_amount', 10, 2)->nullable();
+            $table->enum('payment_frequency', ['monthly', 'quarterly', 'yearly'])->default('monthly');
+            $table->enum('status', ['active', 'ended', 'cancelled'])->default('active');
+            $table->text('notes')->nullable();
+            $table->date('cancelled_at')->nullable();
+            $table->string('cancellation_reason')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('rentals');
+    }
+};
+```
+
+```php
+<?php
+// database/migrations/2024_01_01_000007_create_documents_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('documents', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('rental_id')->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->string('original_name');
+            $table->string('file_path');
+            $table->string('file_type');
+            $table->bigInteger('file_size');
+            $table->enum('document_type', ['lease_contract', 'amendment', 'inventory', 'other'])->default('lease_contract');
+            $table->foreignId('uploaded_by')->constrained('users')->onDelete('cascade');
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('documents');
+    }
+};
+```
+
+```php
+<?php
+// database/migrations/2024_01_01_000008_create_notifications_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('notifications', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('type');
+            $table->morphs('notifiable');
+            $table->text('data');
+            $table->timestamp('read_at')->nullable();
+            $table->timestamp('emailed_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('notifications');
+    }
+};
+```
+
+```php
+<?php
+// database/migrations/2024_01_01_000009_create_activity_logs_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('activity_logs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
+            $table->string('action'); // created, updated, deleted, rental_started, rental_ended
+            $table->string('model_type');
+            $table->unsignedBigInteger('model_id');
+            $table->json('old_values')->nullable();
+            $table->json('new_values')->nullable();
+            $table->string('ip_address')->nullable();
+            $table->timestamps();
+
+            $table->index(['model_type', 'model_id']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('activity_logs');
+    }
+};
+```
+
+---
+
+## 4. Models, Controllers, Routes et Vues Laravel
+
+### 4.a) Models
+
+```php
+<?php
+// app/Models/User.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
+class User extends Authenticatable
+{
+    use HasFactory, Notifiable;
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'phone',
+        'role',
+        'is_active',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'is_active' => 'boolean',
+        ];
+    }
+
+    // Scopes
+    public function scopeBailleurs($query)
+    {
+        return $query->where('role', 'bailleur');
+    }
+
+    public function scopeAvocats($query)
+    {
+        return $query->where('role', 'avocat');
+    }
+
+    public function scopeAdmins($query)
+    {
+        return $query->where('role', 'admin');
+    }
+
+    // Relations
+    public function properties(): HasMany
+    {
+        return $this->hasMany(Property::class);
+    }
+
+    public function tenants(): HasMany
+    {
+        return $this->hasMany(Tenant::class);
+    }
+
+    // Relations pour bailleur
+    public function avocats(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'bailleur_avocat', 'bailleur_id', 'avocat_id')
+                    ->withPivot('is_active')
+                    ->withTimestamps();
+    }
+
+    // Relations pour avocat
+    public function bailleurs(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'bailleur_avocat', 'avocat_id', 'bailleur_id')
+                    ->withPivot('is_active')
+                    ->withTimestamps();
+    }
+
+    public function uploadedDocuments(): HasMany
+    {
+        return $this->hasMany(Document::class, 'uploaded_by');
+    }
+
+    // Helpers
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isBailleur(): bool
+    {
+        return $this->role === 'bailleur';
+    }
+
+    public function isAvocat(): bool
+    {
+        return $this->role === 'avocat';
+    }
+
+    public function getActiveAvocats()
+    {
+        return $this->avocats()->wherePivot('is_active', true)->get();
+    }
+}
+```
+
+```php
+<?php
+// app/Models/PropertyType.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
+
+class PropertyType extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'name',
+        'slug',
+        'description',
+        'requires_address',
+        'is_active',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'requires_address' => 'boolean',
+            'is_active' => 'boolean',
+        ];
+    }
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($propertyType) {
+            if (empty($propertyType->slug)) {
+                $propertyType->slug = Str::slug($propertyType->name);
+            }
+        });
+
+        static::updating(function ($propertyType) {
+            if ($propertyType->isDirty('name')) {
+                $propertyType->slug = Str::slug($propertyType->name);
+            }
+        });
+    }
+
+    // Scopes
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeRequiresAddress($query)
+    {
+        return $query->where('requires_address', true);
+    }
+
+    // Relations
+    public function properties(): HasMany
+    {
+        return $this->hasMany(Property::class);
+    }
+
+    // Helpers
+    public function isImmobilier(): bool
+    {
+        return $this->requires_address;
+    }
+
+    public function isMobilier(): bool
+    {
+        return !$this->requires_address;
+    }
+}
+```
+
+```php
+<?php
+// app/Models/Property.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Property extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $fillable = [
+        'name',
+        'description',
+        'property_type_id',
+        'user_id',
+        'address',
+        'city',
+        'postal_code',
+        'country',
+        'is_for_rent',
+        'status',
+        'surface',
+        'rooms',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_for_rent' => 'boolean',
+            'surface' => 'decimal:2',
+        ];
+    }
+
+    // Scopes
+    public function scopeForRent($query)
+    {
+        return $query->where('is_for_rent', true);
+    }
+
+    public function scopeAvailable($query)
+    {
+        return $query->where('status', 'available');
+    }
+
+    public function scopeRented($query)
+    {
+        return $query->where('status', 'rented');
+    }
+
+    public function scopeOwnedBy($query, $userId)
+    {
+        return $query->where('user_id', $userId);
+    }
+
+    // Relations
+    public function propertyType(): BelongsTo
+    {
+        return $this->belongsTo(PropertyType::class);
+    }
+
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function rentals(): HasMany
+    {
+        return $this->hasMany(Rental::class);
+    }
+
+    public function activeRental(): HasOne
+    {
+        return $this->hasOne(Rental::class)->where('status', 'active');
+    }
+
+    public function currentTenant()
+    {
+        $activeRental = $this->activeRental;
+        return $activeRental ? $activeRental->tenant : null;
+    }
+
+    // Helpers
+    public function getFullAddressAttribute(): string
+    {
+        $parts = array_filter([
+            $this->address,
+            $this->postal_code,
+            $this->city,
+            $this->country,
+        ]);
+
+        return implode(', ', $parts);
+    }
+
+    public function isAvailable(): bool
+    {
+        return $this->status === 'available';
+    }
+
+    public function isRented(): bool
+    {
+        return $this->status === 'rented';
+    }
+
+    public function markAsRented(): void
+    {
+        $this->update(['status' => 'rented']);
+    }
+
+    public function markAsAvailable(): void
+    {
+        $this->update(['status' => 'available']);
+    }
+}
+```
+
+```php
+<?php
+// app/Models/Tenant.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Tenant extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $fillable = [
+        'user_id',
+        'first_name',
+        'last_name',
+        'email',
+        'phone',
+        'address',
+        'city',
+        'postal_code',
+        'id_card_number',
+        'notes',
+    ];
+
+    // Relations
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function rentals(): HasMany
+    {
+        return $this->hasMany(Rental::class);
+    }
+
+    public function activeRentals(): HasMany
+    {
+        return $this->hasMany(Rental::class)->where('status', 'active');
+    }
+
+    // Accessors
+    public function getFullNameAttribute(): string
+    {
+        return "{$this->first_name} {$this->last_name}";
+    }
+
+    public function getFullAddressAttribute(): string
+    {
+        $parts = array_filter([
+            $this->address,
+            $this->postal_code,
+            $this->city,
+        ]);
+
+        return implode(', ', $parts);
+    }
+
+    // Scopes
+    public function scopeOwnedBy($query, $userId)
+    {
+        return $query->where('user_id', $userId);
+    }
+}
+```
+
+```php
+<?php
+// app/Models/Rental.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Rental extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $fillable = [
+        'property_id',
+        'tenant_id',
+        'start_date',
+        'end_date',
+        'rent_amount',
+        'deposit_amount',
+        'payment_frequency',
+        'status',
+        'notes',
+        'cancelled_at',
+        'cancellation_reason',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'start_date' => 'date',
+            'end_date' => 'date',
+            'cancelled_at' => 'date',
+            'rent_amount' => 'decimal:2',
+            'deposit_amount' => 'decimal:2',
+        ];
+    }
+
+    // Relations
+    public function property(): BelongsTo
+    {
+        return $this->belongsTo(Property::class);
+    }
+
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Document::class);
+    }
+
+    public function leaseContract()
+    {
+        return $this->documents()->where('document_type', 'lease_contract')->first();
+    }
+
+    // Scopes
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active');
+    }
+
+    public function scopeEnded($query)
+    {
+        return $query->where('status', 'ended');
+    }
+
+    public function scopeCancelled($query)
+    {
+        return $query->where('status', 'cancelled');
+    }
+
+    // Helpers
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    public function cancel(string $reason = null): void
+    {
+        $this->update([
+            'status' => 'cancelled',
+            'cancelled_at' => now(),
+            'cancellation_reason' => $reason,
+        ]);
+
+        $this->property->markAsAvailable();
+    }
+
+    public function end(): void
+    {
+        $this->update([
+            'status' => 'ended',
+            'end_date' => now(),
+        ]);
+
+        $this->property->markAsAvailable();
+    }
+}
+```
+
+```php
+<?php
+// app/Models/Document.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
+
+class Document extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'rental_id',
+        'name',
+        'original_name',
+        'file_path',
+        'file_type',
+        'file_size',
+        'document_type',
+        'uploaded_by',
+    ];
+
+    // Relations
+    public function rental(): BelongsTo
+    {
+        return $this->belongsTo(Rental::class);
+    }
+
+    public function uploader(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    // Helpers
+    public function getUrlAttribute(): string
+    {
+        return Storage::url($this->file_path);
+    }
+
+    public function getFileSizeFormattedAttribute(): string
+    {
+        $bytes = $this->file_size;
+        $units = ['B', 'KB', 'MB', 'GB'];
+        
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+        
+        return round($bytes, 2) . ' ' . $units[$i];
+    }
+
+    public function isImage(): bool
+    {
+        return in_array($this->file_type, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+    }
+
+    public function isPdf(): bool
+    {
+        return $this->file_type === 'application/pdf';
+    }
+}
+```
+
+```php
+<?php
+// app/Models/ActivityLog.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+
+class ActivityLog extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'user_id',
+        'action',
+        'model_type',
+        'model_id',
+        'old_values',
+        'new_values',
+        'ip_address',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'old_values' => 'array',
+            'new_values' => 'array',
+        ];
+    }
+
+    // Relations
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function subject(): MorphTo
+    {
+        return $this->morphTo('model');
+    }
+
+    // Scopes
+    public function scopeForModel($query, $modelType, $modelId)
+    {
+        return $query->where('model_type', $modelType)->where('model_id', $modelId);
+    }
+
+    public function scopeByUser($query, $userId)
+    {
+        return $query->where('user_id', $userId);
+    }
+
+    // Static methods
+    public static function log(
+        string $action,
+        Model $model,
+        ?array $oldValues = null,
+        ?array $newValues = null
+    ): self {
+        return self::create([
+            'user_id' => auth()->id(),
+            'action' => $action,
+            'model_type' => get_class($model),
+            'model_id' => $model->id,
+            'old_values' => $oldValues,
+            'new_values' => $newValues,
+            'ip_address' => request()->ip(),
+        ]);
+    }
+}
+```
+
+### 4.b) Controllers
+
+```php
+<?php
+// app/Http/Controllers/Auth/AuthController.php
+
+namespace App\Http\Controllers\Auth;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
+
+class AuthController extends Controller
+{
+    public function showLoginForm()
+    {
+        return view('auth.login');
+    }
+
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+            $request->session()->regenerate();
+
+            $user = Auth::user();
+            
+            if ($user->isAdmin()) {
+                return redirect()->intended(route('admin.dashboard'));
+            } elseif ($user->isBailleur()) {
+                return redirect()->intended(route('bailleur.dashboard'));
+            } else {
+                return redirect()->intended(route('avocat.dashboard'));
+            }
+        }
+
+        return back()->withErrors([
+            'email' => 'Les identifiants fournis ne correspondent pas à nos enregistrements.',
+        ])->onlyInput('email');
+    }
+
+    public function showRegistrationForm()
+    {
+        return view('auth.register');
+    }
+
+    public function register(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'password' => ['required', 'confirmed', Password::defaults()],
+            'role' => ['required', 'in:bailleur,avocat'],
+        ]);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'phone' => $validated['phone'] ?? null,
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role'],
+        ]);
+
+        Auth::login($user);
+
+        if ($user->isBailleur()) {
+            return redirect()->route('bailleur.dashboard');
+        } else {
+            return redirect()->route('avocat.dashboard');
+        }
+    }
+
+    public function logout(Request $request)
+    {
+        Auth::logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/');
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Admin/DashboardController.php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Models\Property;
+use App\Models\PropertyType;
+use App\Models\Rental;
+
+class DashboardController extends Controller
+{
+    public function index()
+    {
+        $stats = [
+            'total_bailleurs' => User::bailleurs()->count(),
+            'total_avocats' => User::avocats()->count(),
+            'total_properties' => Property::count(),
+            'total_rentals' => Rental::active()->count(),
+            'property_types' => PropertyType::count(),
+        ];
+
+        $recentBailleurs = User::bailleurs()->latest()->take(5)->get();
+        $recentProperties = Property::with(['owner', 'propertyType'])->latest()->take(5)->get();
+
+        return view('admin.dashboard', compact('stats', 'recentBailleurs', 'recentProperties'));
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Admin/PropertyTypeController.php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\PropertyType;
+use Illuminate\Http\Request;
+
+class PropertyTypeController extends Controller
+{
+    public function index()
+    {
+        $propertyTypes = PropertyType::withCount('properties')->latest()->paginate(15);
+        return view('admin.property-types.index', compact('propertyTypes'));
+    }
+
+    public function create()
+    {
+        return view('admin.property-types.create');
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:property_types'],
+            'description' => ['nullable', 'string'],
+            'requires_address' => ['required', 'boolean'],
+        ]);
+
+        PropertyType::create($validated);
+
+        return redirect()->route('admin.property-types.index')
+            ->with('success', 'Type de bien créé avec succès.');
+    }
+
+    public function edit(PropertyType $propertyType)
+    {
+        return view('admin.property-types.edit', compact('propertyType'));
+    }
+
+    public function update(Request $request, PropertyType $propertyType)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:property_types,name,' . $propertyType->id],
+            'description' => ['nullable', 'string'],
+            'requires_address' => ['required', 'boolean'],
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $propertyType->update($validated);
+
+        return redirect()->route('admin.property-types.index')
+            ->with('success', 'Type de bien mis à jour avec succès.');
+    }
+
+    public function destroy(PropertyType $propertyType)
+    {
+        if ($propertyType->properties()->exists()) {
+            return back()->with('error', 'Impossible de supprimer ce type : des biens y sont associés.');
+        }
+
+        $propertyType->delete();
+
+        return redirect()->route('admin.property-types.index')
+            ->with('success', 'Type de bien supprimé avec succès.');
+    }
+
+    public function toggleStatus(PropertyType $propertyType)
+    {
+        $propertyType->update(['is_active' => !$propertyType->is_active]);
+
+        $status = $propertyType->is_active ? 'activé' : 'désactivé';
+        return back()->with('success', "Type de bien {$status} avec succès.");
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Admin/UserController.php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
+
+class UserController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = User::query();
+
+        if ($request->filled('role')) {
+            $query->where('role', $request->role);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $query->latest()->paginate(15);
+
+        return view('admin.users.index', compact('users'));
+    }
+
+    public function create()
+    {
+        return view('admin.users.create');
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'password' => ['required', 'confirmed', Password::defaults()],
+            'role' => ['required', 'in:admin,bailleur,avocat'],
+        ]);
+
+        $validated['password'] = Hash::make($validated['password']);
+
+        User::create($validated);
+
+        return redirect()->route('admin.users.index')
+            ->with('success', 'Utilisateur créé avec succès.');
+    }
+
+    public function show(User $user)
+    {
+        $user->load(['properties', 'avocats', 'bailleurs']);
+        return view('admin.users.show', compact('user'));
+    }
+
+    public function edit(User $user)
+    {
+        return view('admin.users.edit', compact('user'));
+    }
+
+    public function update(Request $request, User $user)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'role' => ['required', 'in:admin,bailleur,avocat'],
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        if ($request->filled('password')) {
+            $request->validate([
+                'password' => ['confirmed', Password::defaults()],
+            ]);
+            $validated['password'] = Hash::make($request->password);
+        }
+
+        $user->update($validated);
+
+        return redirect()->route('admin.users.index')
+            ->with('success', 'Utilisateur mis à jour avec succès.');
+    }
+
+    public function destroy(User $user)
+    {
+        if ($user->id === auth()->id()) {
+            return back()->with('error', 'Vous ne pouvez pas supprimer votre propre compte.');
+        }
+
+        $user->delete();
+
+        return redirect()->route('admin.users.index')
+            ->with('success', 'Utilisateur supprimé avec succès.');
+    }
+
+    public function toggleStatus(User $user)
+    {
+        if ($user->id === auth()->id()) {
+            return back()->with('error', 'Vous ne pouvez pas désactiver votre propre compte.');
+        }
+
+        $user->update(['is_active' => !$user->is_active]);
+
+        $status = $user->is_active ? 'activé' : 'désactivé';
+        return back()->with('success', "Compte utilisateur {$status} avec succès.");
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Bailleur/DashboardController.php
+
+namespace App\Http\Controllers\Bailleur;
+
+use App\Http\Controllers\Controller;
+use App\Models\Property;
+use App\Models\Rental;
+use App\Models\Tenant;
+
+class DashboardController extends Controller
+{
+    public function index()
+    {
+        $user = auth()->user();
+
+        $stats = [
+            'total_properties' => Property::ownedBy($user->id)->count(),
+            'rented_properties' => Property::ownedBy($user->id)->rented()->count(),
+            'available_properties' => Property::ownedBy($user->id)->available()->count(),
+            'total_tenants' => Tenant::ownedBy($user->id)->count(),
+            'active_rentals' => Rental::whereHas('property', fn($q) => $q->ownedBy($user->id))
+                                      ->active()->count(),
+        ];
+
+        $recentProperties = Property::ownedBy($user->id)
+            ->with('propertyType')
+            ->latest()
+            ->take(5)
+            ->get();
+
+        $activeRentals = Rental::whereHas('property', fn($q) => $q->ownedBy($user->id))
+            ->active()
+            ->with(['property', 'tenant'])
+            ->latest()
+            ->take(5)
+            ->get();
+
+        $avocats = $user->getActiveAvocats();
+
+        return view('bailleur.dashboard', compact('stats', 'recentProperties', 'activeRentals', 'avocats'));
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Bailleur/PropertyController.php
+
+namespace App\Http\Controllers\Bailleur;
+
+use App\Http\Controllers\Controller;
+use App\Models\Property;
+use App\Models\PropertyType;
+use App\Models\ActivityLog;
+use App\Notifications\PropertyCreatedNotification;
+use Illuminate\Http\Request;
+
+class PropertyController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Property::ownedBy(auth()->id())->with('propertyType');
+
+        if ($request->filled('type')) {
+            $query->where('property_type_id', $request->type);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('address', 'like', "%{$search}%")
+                  ->orWhere('city', 'like', "%{$search}%");
+            });
+        }
+
+        $properties = $query->latest()->paginate(15);
+        $propertyTypes = PropertyType::active()->get();
+
+        return view('bailleur.properties.index', compact('properties', 'propertyTypes'));
+    }
+
+    public function create()
+    {
+        $propertyTypes = PropertyType::active()->get();
+        return view('bailleur.properties.create', compact('propertyTypes'));
+    }
+
+    public function store(Request $request)
+    {
+        $propertyType = PropertyType::findOrFail($request->property_type_id);
+
+        $rules = [
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'property_type_id' => ['required', 'exists:property_types,id'],
+            'is_for_rent' => ['required', 'boolean'],
+            'surface' => ['nullable', 'numeric', 'min:0'],
+            'rooms' => ['nullable', 'integer', 'min:0'],
+        ];
+
+        if ($propertyType->requires_address) {
+            $rules['address'] = ['required', 'string', 'max:255'];
+            $rules['city'] = ['required', 'string', 'max:255'];
+            $rules['postal_code'] = ['required', 'string', 'max:20'];
+            $rules['country'] = ['nullable', 'string', 'max:255'];
+        } else {
+            $rules['address'] = ['nullable', 'string', 'max:255'];
+            $rules['city'] = ['nullable', 'string', 'max:255'];
+            $rules['postal_code'] = ['nullable', 'string', 'max:20'];
+            $rules['country'] = ['nullable', 'string', 'max:255'];
+        }
+
+        $validated = $request->validate($rules);
+        $validated['user_id'] = auth()->id();
+        $validated['status'] = 'available';
+
+        $property = Property::create($validated);
+
+        ActivityLog::log('created', $property, null, $property->toArray());
+
+        // Notifier les avocats si le bien est mis en location
+        if ($property->is_for_rent) {
+            $this->notifyAvocats($property, 'property_created');
+        }
+
+        return redirect()->route('bailleur.properties.show', $property)
+            ->with('success', 'Bien créé avec succès.');
+    }
+
+    public function show(Property $property)
+    {
+        $this->authorize('view', $property);
+
+        $property->load(['propertyType', 'rentals.tenant', 'activeRental.tenant', 'activeRental.documents']);
+
+        return view('bailleur.properties.show', compact('property'));
+    }
+
+    public function edit(Property $property)
+    {
+        $this->authorize('update', $property);
+
+        $propertyTypes = PropertyType::active()->get();
+        return view('bailleur.properties.edit', compact('property', 'propertyTypes'));
+    }
+
+    public function update(Request $request, Property $property)
+    {
+        $this->authorize('update', $property);
+
+        $propertyType = PropertyType::findOrFail($request->property_type_id);
+        $oldValues = $property->toArray();
+
+        $rules = [
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'property_type_id' => ['required', 'exists:property_types,id'],
+            'is_for_rent' => ['required', 'boolean'],
+            'surface' => ['nullable', 'numeric', 'min:0'],
+            'rooms' => ['nullable', 'integer', 'min:0'],
+        ];
+
+        if ($propertyType->requires_address) {
+            $rules['address'] = ['required', 'string', 'max:255'];
+            $rules['city'] = ['required', 'string', 'max:255'];
+            $rules['postal_code'] = ['required', 'string', 'max:20'];
+            $rules['country'] = ['nullable', 'string', 'max:255'];
+        }
+
+        $validated = $request->validate($rules);
+
+        $property->update($validated);
+
+        ActivityLog::log('updated', $property, $oldValues, $property->toArray());
+
+        return redirect()->route('bailleur.properties.show', $property)
+            ->with('success', 'Bien mis à jour avec succès.');
+    }
+
+    public function destroy(Property $property)
+    {
+        $this->authorize('delete', $property);
+
+        if ($property->isRented()) {
+            return back()->with('error', 'Impossible de supprimer un bien actuellement loué.');
+        }
+
+        ActivityLog::log('deleted', $property, $property->toArray(), null);
+
+        $property->delete();
+
+        return redirect()->route('bailleur.properties.index')
+            ->with('success', 'Bien supprimé avec succès.');
+    }
+
+    public function getPropertyTypeInfo(PropertyType $propertyType)
+    {
+        return response()->json([
+            'requires_address' => $propertyType->requires_address,
+        ]);
+    }
+
+    protected function notifyAvocats(Property $property, string $eventType)
+    {
+        $bailleur = auth()->user();
+        $avocats = $bailleur->getActiveAvocats();
+
+        foreach ($avocats as $avocat) {
+            $avocat->notify(new PropertyCreatedNotification($property, $bailleur));
+        }
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Bailleur/TenantController.php
+
+namespace App\Http\Controllers\Bailleur;
+
+use App\Http\Controllers\Controller;
+use App\Models\Tenant;
+use Illuminate\Http\Request;
+
+class TenantController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Tenant::ownedBy(auth()->id())->with('activeRentals.property');
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%");
+            });
+        }
+
+        $tenants = $query->latest()->paginate(15);
+
+        return view('bailleur.tenants.index', compact('tenants'));
+    }
+
+    public function create()
+    {
+        return view('bailleur.tenants.create');
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['required', 'string', 'max:20'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'city' => ['nullable', 'string', 'max:255'],
+            'postal_code' => ['nullable', 'string', 'max:20'],
+            'id_card_number' => ['nullable', 'string', 'max:50'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $validated['user_id'] = auth()->id();
+
+        $tenant = Tenant::create($validated);
+
+        return redirect()->route('bailleur.tenants.show', $tenant)
+            ->with('success', 'Locataire créé avec succès.');
+    }
+
+    public function show(Tenant $tenant)
+    {
+        $this->authorize('view', $tenant);
+
+        $tenant->load(['rentals.property', 'rentals.documents']);
+
+        return view('bailleur.tenants.show', compact('tenant'));
+    }
+
+    public function edit(Tenant $tenant)
+    {
+        $this->authorize('update', $tenant);
+
+        return view('bailleur.tenants.edit', compact('tenant'));
+    }
+
+    public function update(Request $request, Tenant $tenant)
+    {
+        $this->authorize('update', $tenant);
+
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['required', 'string', 'max:20'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'city' => ['nullable', 'string', 'max:255'],
+            'postal_code' => ['nullable', 'string', 'max:20'],
+            'id_card_number' => ['nullable', 'string', 'max:50'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $tenant->update($validated);
+
+        return redirect()->route('bailleur.tenants.show', $tenant)
+            ->with('success', 'Locataire mis à jour avec succès.');
+    }
+
+    public function destroy(Tenant $tenant)
+    {
+        $this->authorize('delete', $tenant);
+
+        if ($tenant->activeRentals()->exists()) {
+            return back()->with('error', 'Impossible de supprimer un locataire avec des locations actives.');
+        }
+
+        $tenant->delete();
+
+        return redirect()->route('bailleur.tenants.index')
+            ->with('success', 'Locataire supprimé avec succès.');
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Bailleur/RentalController.php
+
+namespace App\Http\Controllers\Bailleur;
+
+use App\Http\Controllers\Controller;
+use App\Models\Property;
+use App\Models\Tenant;
+use App\Models\Rental;
+use App\Models\Document;
+use App\Models\ActivityLog;
+use App\Notifications\RentalCreatedNotification;
+use App\Notifications\RentalCancelledNotification;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+
+class RentalController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Rental::whereHas('property', fn($q) => $q->ownedBy(auth()->id()))
+            ->with(['property', 'tenant']);
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $rentals = $query->latest()->paginate(15);
+
+        return view('bailleur.rentals.index', compact('rentals'));
+    }
+
+    public function create(Request $request)
+    {
+        $properties = Property::ownedBy(auth()->id())
+            ->available()
+            ->forRent()
+            ->with('propertyType')
+            ->get();
+
+        $tenants = Tenant::ownedBy(auth()->id())->get();
+
+        $selectedProperty = null;
+        if ($request->filled('property_id')) {
+            $selectedProperty = Property::find($request->property_id);
+        }
+
+        return view('bailleur.rentals.create', compact('properties', 'tenants', 'selectedProperty'));
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'property_id' => ['required', 'exists:properties,id'],
+            'tenant_id' => ['nullable', 'exists:tenants,id'],
+            'new_tenant' => ['nullable', 'array'],
+            'new_tenant.first_name' => ['required_without:tenant_id', 'string', 'max:255'],
+            'new_tenant.last_name' => ['required_without:tenant_id', 'string', 'max:255'],
+            'new_tenant.phone' => ['required_without:tenant_id', 'string', 'max:20'],
+            'new_tenant.email' => ['nullable', 'email', 'max:255'],
+            'start_date' => ['required', 'date'],
+            'end_date' => ['nullable', 'date', 'after:start_date'],
+            'rent_amount' => ['required', 'numeric', 'min:0'],
+            'deposit_amount' => ['nullable', 'numeric', 'min:0'],
+            'payment_frequency' => ['required', 'in:monthly,quarterly,yearly'],
+            'notes' => ['nullable', 'string'],
+            'lease_contract' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+        ]);
+
+        $property = Property::findOrFail($validated['property_id']);
+        $this->authorize('update', $property);
+
+        if (!$property->isAvailable()) {
+            return back()->with('error', 'Ce bien n\'est pas disponible à la location.');
+        }
+
+        // Créer ou récupérer le locataire
+        if (!empty($validated['tenant_id'])) {
+            $tenant = Tenant::findOrFail($validated['tenant_id']);
+        } else {
+            $tenant = Tenant::create([
+                'user_id' => auth()->id(),
+                'first_name' => $validated['new_tenant']['first_name'],
+                'last_name' => $validated['new_tenant']['last_name'],
+                'phone' => $validated['new_tenant']['phone'],
+                'email' => $validated['new_tenant']['email'] ?? null,
+            ]);
+        }
+
+        // Créer la location
+        $rental = Rental::create([
+            'property_id' => $property->id,
+            'tenant_id' => $tenant->id,
+            'start_date' => $validated['start_date'],
+            'end_date' => $validated['end_date'] ?? null,
+            'rent_amount' => $validated['rent_amount'],
+            'deposit_amount' => $validated['deposit_amount'] ?? null,
+            'payment_frequency' => $validated['payment_frequency'],
+            'notes' => $validated['notes'] ?? null,
+            'status' => 'active',
+        ]);
+
+        // Upload du contrat
+        if ($request->hasFile('lease_contract')) {
+            $file = $request->file('lease_contract');
+            $fileName = Str::uuid() . '.' . $file->getClientOriginalExtension();
+            $filePath = $file->storeAs('contracts/' . auth()->id(), $fileName, 'private');
+
+            Document::create([
+                'rental_id' => $rental->id,
+                'name' => 'Contrat de bail',
+                'original_name' => $file->getClientOriginalName(),
+                'file_path' => $filePath,
+                'file_type' => $file->getMimeType(),
+                'file_size' => $file->getSize(),
+                'document_type' => 'lease_contract',
+                'uploaded_by' => auth()->id(),
+            ]);
+        }
+
+        // Marquer le bien comme loué
+        $property->markAsRented();
+
+        ActivityLog::log('rental_started', $rental, null, $rental->toArray());
+
+        // Notifier les avocats
+        $this->notifyAvocats($rental, 'rental_created');
+
+        return redirect()->route('bailleur.rentals.show', $rental)
+            ->with('success', 'Location créée avec succès.');
+    }
+
+    public function show(Rental $rental)
+    {
+        $this->authorize('view', $rental->property);
+
+        $rental->load(['property.propertyType', 'tenant', 'documents']);
+
+        return view('bailleur.rentals.show', compact('rental'));
+    }
+
+    public function cancel(Request $request, Rental $rental)
+    {
+        $this->authorize('update', $rental->property);
+
+        if (!$rental->isActive()) {
+            return back()->with('error', 'Cette location n\'est pas active.');
+        }
+
+        $validated = $request->validate([
+            'cancellation_reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $oldValues = $rental->toArray();
+
+        $rental->cancel($validated['cancellation_reason'] ?? null);
+
+        ActivityLog::log('rental_ended', $rental, $oldValues, $rental->toArray());
+
+        // Notifier les avocats
+        $this->notifyAvocats($rental, 'rental_cancelled');
+
+        return redirect()->route('bailleur.rentals.index')
+            ->with('success', 'Location annulée avec succès.');
+    }
+
+    public function addDocument(Request $request, Rental $rental)
+    {
+        $this->authorize('update', $rental->property);
+
+        $validated = $request->validate([
+            'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            'document_type' => ['required', 'in:lease_contract,amendment,inventory,other'],
+            'name' => ['required', 'string', 'max:255'],
+        ]);
+
+        $file = $request->file('document');
+        $fileName = Str::uuid() . '.' . $file->getClientOriginalExtension();
+        $filePath = $file->storeAs('contracts/' . auth()->id(), $fileName, 'private');
+
+        Document::create([
+            'rental_id' => $rental->id,
+            'name' => $validated['name'],
+            'original_name' => $file->getClientOriginalName(),
+            'file_path' => $filePath,
+            'file_type' => $file->getMimeType(),
+            'file_size' => $file->getSize(),
+            'document_type' => $validated['document_type'],
+            'uploaded_by' => auth()->id(),
+        ]);
+
+        return back()->with('success', 'Document ajouté avec succès.');
+    }
+
+    protected function notifyAvocats(Rental $rental, string $eventType)
+    {
+        $bailleur = auth()->user();
+        $avocats = $bailleur->getActiveAvocats();
+
+        foreach ($avocats as $avocat) {
+            if ($eventType === 'rental_created') {
+                $avocat->notify(new RentalCreatedNotification($rental, $bailleur));
+            } elseif ($eventType === 'rental_cancelled') {
+                $avocat->notify(new RentalCancelledNotification($rental, $bailleur));
+            }
+        }
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Bailleur/AvocatController.php
+
+namespace App\Http\Controllers\Bailleur;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use App\Notifications\AvocatInvitationNotification;
+
+class AvocatController extends Controller
+{
+    public function index()
+    {
+        $avocats = auth()->user()->avocats()->withPivot('is_active', 'created_at')->get();
+
+        return view('bailleur.avocats.index', compact('avocats'));
+    }
+
+    public function create()
+    {
+        $existingAvocats = User::avocats()
+            ->whereNotIn('id', auth()->user()->avocats->pluck('id'))
+            ->get();
+
+        return view('bailleur.avocats.create', compact('existingAvocats'));
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'avocat_id' => ['nullable', 'exists:users,id'],
+            'name' => ['required_without:avocat_id', 'string', 'max:255'],
+            'email' => ['required_without:avocat_id', 'email', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        if (!empty($validated['avocat_id'])) {
+            // Associer un avocat existant
+            $avocat = User::findOrFail($validated['avocat_id']);
+        } else {
+            // Vérifier si l'avocat existe déjà
+            $avocat = User::where('email', $validated['email'])->first();
+
+            if (!$avocat) {
+                // Créer un nouveau compte avocat
+                $temporaryPassword = Str::random(12);
+                $avocat = User::create([
+                    'name' => $validated['name'],
+                    'email' => $validated['email'],
+                    'phone' => $validated['phone'] ?? null,
+                    'password' => Hash::make($temporaryPassword),
+                    'role' => 'avocat',
+                ]);
+
+                // Envoyer l'invitation par email
+                $avocat->notify(new AvocatInvitationNotification(auth()->user(), $temporaryPassword));
+            }
+        }
+
+        // Associer l'avocat au bailleur
+        auth()->user()->avocats()->syncWithoutDetaching([
+            $avocat->id => ['is_active' => true]
+        ]);
+
+        return redirect()->route('bailleur.avocats.index')
+            ->with('success', 'Avocat associé avec succès.');
+    }
+
+    public function toggleStatus(User $avocat)
+    {
+        $pivot = auth()->user()->avocats()->where('avocat_id', $avocat->id)->first();
+
+        if (!$pivot) {
+            return back()->with('error', 'Cet avocat n\'est pas associé à votre compte.');
+        }
+
+        $newStatus = !$pivot->pivot->is_active;
+        auth()->user()->avocats()->updateExistingPivot($avocat->id, ['is_active' => $newStatus]);
+
+        $status = $newStatus ? 'activé' : 'désactivé';
+        return back()->with('success', "Avocat {$status} avec succès.");
+    }
+
+    public function destroy(User $avocat)
+    {
+        auth()->user()->avocats()->detach($avocat->id);
+
+        return redirect()->route('bailleur.avocats.index')
+            ->with('success', 'Avocat dissocié avec succès.');
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Avocat/DashboardController.php
+
+namespace App\Http\Controllers\Avocat;
+
+use App\Http\Controllers\Controller;
+use App\Models\Rental;
+use App\Models\Property;
+
+class DashboardController extends Controller
+{
+    public function index()
+    {
+        $user = auth()->user();
+        $bailleurs = $user->bailleurs()->wherePivot('is_active', true)->get();
+        $bailleurIds = $bailleurs->pluck('id');
+
+        $stats = [
+            'total_bailleurs' => $bailleurs->count(),
+            'total_properties' => Property::whereIn('user_id', $bailleurIds)->count(),
+            'active_rentals' => Rental::whereHas('property', fn($q) => $q->whereIn('user_id', $bailleurIds))
+                                      ->active()->count(),
+        ];
+
+        $recentEvents = $this->getRecentEvents($bailleurIds);
+
+        return view('avocat.dashboard', compact('stats', 'bailleurs', 'recentEvents'));
+    }
+
+    protected function getRecentEvents($bailleurIds)
+    {
+        // Récupérer les locations récentes (créées ou annulées)
+        $rentals = Rental::whereHas('property', fn($q) => $q->whereIn('user_id', $bailleurIds))
+            ->with(['property.owner', 'tenant'])
+            ->latest()
+            ->take(10)
+            ->get();
+
+        // Récupérer les biens récemment mis en location
+        $properties = Property::whereIn('user_id', $bailleurIds)
+            ->where('is_for_rent', true)
+            ->with('owner')
+            ->latest()
+            ->take(10)
+            ->get();
+
+        $events = collect();
+
+        foreach ($rentals as $rental) {
+            $events->push([
+                'type' => $rental->status === 'active' ? 'rental_created' : 'rental_ended',
+                'date' => $rental->created_at,
+                'data' => $rental,
+            ]);
+        }
+
+        foreach ($properties as $property) {
+            $events->push([
+                'type' => 'property_for_rent',
+                'date' => $property->created_at,
+                'data' => $property,
+            ]);
+        }
+
+        return $events->sortByDesc('date')->take(15)->values();
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Avocat/BailleurController.php
+
+namespace App\Http\Controllers\Avocat;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Models\Property;
+use App\Models\Rental;
+
+class BailleurController extends Controller
+{
+    public function index()
+    {
+        $bailleurs = auth()->user()->bailleurs()
+            ->wherePivot('is_active', true)
+            ->withCount(['properties', 'avocats'])
+            ->get();
+
+        return view('avocat.bailleurs.index', compact('bailleurs'));
+    }
+
+    public function show(User $bailleur)
+    {
+        // Vérifier que l'avocat est bien associé à ce bailleur
+        if (!auth()->user()->bailleurs()->where('bailleur_id', $bailleur->id)->exists()) {
+            abort(403);
+        }
+
+        $properties = $bailleur->properties()->with('propertyType')->get();
+        $activeRentals = Rental::whereHas('property', fn($q) => $q->where('user_id', $bailleur->id))
+            ->active()
+            ->with(['property', 'tenant', 'documents'])
+            ->get();
+
+        return view('avocat.bailleurs.show', compact('bailleur', 'properties', 'activeRentals'));
+    }
+
+    public function properties(User $bailleur)
+    {
+        if (!auth()->user()->bailleurs()->where('bailleur_id', $bailleur->id)->exists()) {
+            abort(403);
+        }
+
+        $properties = $bailleur->properties()
+            ->with(['propertyType', 'activeRental.tenant'])
+            ->paginate(15);
+
+        return view('avocat.bailleurs.properties', compact('bailleur', 'properties'));
+    }
+
+    public function rentals(User $bailleur)
+    {
+        if (!auth()->user()->bailleurs()->where('bailleur_id', $bailleur->id)->exists()) {
+            abort(403);
+        }
+
+        $rentals = Rental::whereHas('property', fn($q) => $q->where('user_id', $bailleur->id))
+            ->with(['property', 'tenant', 'documents'])
+            ->latest()
+            ->paginate(15);
+
+        return view('avocat.bailleurs.rentals', compact('bailleur', 'rentals'));
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/Avocat/DocumentController.php
+
+namespace App\Http\Controllers\Avocat;
+
+use App\Http\Controllers\Controller;
+use App\Models\Document;
+use App\Models\Rental;
+use Illuminate\Support\Facades\Storage;
+
+class DocumentController extends Controller
+{
+    public function download(Document $document)
+    {
+        $rental = $document->rental;
+        $property = $rental->property;
+        $bailleur = $property->owner;
+
+        // Vérifier que l'avocat est associé au bailleur propriétaire du bien
+        if (!auth()->user()->bailleurs()->where('bailleur_id', $bailleur->id)->exists()) {
+            abort(403);
+        }
+
+        return Storage::disk('private')->download(
+            $document->file_path,
+            $document->original_name
+        );
+    }
+
+    public function view(Document $document)
+    {
+        $rental = $document->rental;
+        $property = $rental->property;
+        $bailleur = $property->owner;
+
+        if (!auth()->user()->bailleurs()->where('bailleur_id', $bailleur->id)->exists()) {
+            abort(403);
+        }
+
+        return response()->file(
+            Storage::disk('private')->path($document->file_path)
+        );
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/NotificationController.php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class NotificationController extends Controller
+{
+    public function index()
+    {
+        $notifications = auth()->user()->notifications()->paginate(20);
+
+        return view('notifications.index', compact('notifications'));
+    }
+
+    public function markAsRead($id)
+    {
+        $notification = auth()->user()->notifications()->findOrFail($id);
+        $notification->markAsRead();
+
+        return back()->with('success', 'Notification marquée comme lue.');
+    }
+
+    public function markAllAsRead()
+    {
+        auth()->user()->unreadNotifications->markAsRead();
+
+        return back()->with('success', 'Toutes les notifications ont été marquées comme lues.');
+    }
+
+    public function destroy($id)
+    {
+        $notification = auth()->user()->notifications()->findOrFail($id);
+        $notification->delete();
+
+        return back()->with('success', 'Notification supprimée.');
+    }
+}
+```
+
+```php
+<?php
+// app/Http/Controllers/DocumentController.php
+
+namespace App\Http\Controllers;
+
+use App\Models\Document;
+use Illuminate\Support\Facades\Storage;
+
+class DocumentController extends Controller
+{
+    public function download(Document $document)
+    {
+        $this->authorize('view', $document);
+
+        return Storage::disk('private')->download(
+            $document->file_path,
+            $document->original_name
+        );
+    }
+
+    public function destroy(Document $document)
+    {
+        $this->authorize('delete', $document);
+
+        Storage::disk('private')->delete($document->file_path);
+        $document->delete();
+
+        return back()->with('success', 'Document supprimé avec succès.');
+    }
+}
+```
+
+### 4.b) Routes
+
+```php
+<?php
+// routes/web.php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\PropertyTypeController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Bailleur\DashboardController as BailleurDashboardController;
+use App\Http\Controllers\Bailleur\PropertyController;
+use App\Http\Controllers\Bailleur\TenantController;
+use App\Http\Controllers\Bailleur\RentalController;
+use App\Http\Controllers\Bailleur\AvocatController as BailleurAvocatController;
+use App\Http\Controllers\Avocat\DashboardController as AvocatDashboardController;
+use App\Http\Controllers\Avocat\BailleurController as AvocatBailleurController;
+use App\Http\Controllers\Avocat\DocumentController as AvocatDocumentController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\DocumentController;
+
+/*
+|--------------------------------------------------------------------------
+| Public Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/', function () {
+    return view('welcome');
+})->name('home');
+
+/*
+|--------------------------------------------------------------------------
+| Authentication Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::get('/register', [AuthController::class, 'showRegistrationForm'])->name('register');
+    Route::post('/register', [AuthController::class, 'register']);
+});
+
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middleware('auth');
+
+/*
+|--------------------------------------------------------------------------
+| Admin Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+
+    // Property Types
+    Route::resource('property-types', PropertyTypeController::class);
+    Route::post('/property-types/{propertyType}/toggle-status', [PropertyTypeController::class, 'toggleStatus'])
+        ->name('property-types.toggle-status');
+
+    // Users
+    Route::resource('users', UserController::class);
+    Route::post('/users/{user}/toggle-status', [UserController::class, 'toggleStatus'])
+        ->name('users.toggle-status');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Bailleur Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware(['auth', 'role:bailleur'])->prefix('bailleur')->name('bailleur.')->group(function () {
+    Route::get('/dashboard', [BailleurDashboardController::class, 'index'])->name('dashboard');
+
+    // Properties
+    Route::resource('properties', PropertyController::class);
+    Route::get('/property-types/{propertyType}/info', [PropertyController::class, 'getPropertyTypeInfo'])
+        ->name('property-types.info');
+
+    // Tenants
+    Route::resource('tenants', TenantController::class);
+
+    // Rentals
+    Route::get('/rentals', [RentalController::class, 'index'])->name('rentals.index');
+    Route::get('/rentals/create', [RentalController::class, 'create'])->name('rentals.create');
+    Route::post('/rentals', [RentalController::class, 'store'])->name('rentals.store');
+    Route::get('/rentals/{rental}', [RentalController::class, 'show'])->name('rentals.show');
+    Route::post('/rentals/{rental}/cancel', [RentalController::class, 'cancel'])->name('rentals.cancel');
+    Route::post('/rentals/{rental}/documents', [RentalController::class, 'addDocument'])->name('rentals.add-document');
+
+    // Avocats
+    Route::get('/avocats', [BailleurAvocatController::class, 'index'])->name('avocats.index');
+    Route::get('/avocats/create', [BailleurAvocatController::class, 'create'])->name('avocats.create');
+    Route::post('/avocats', [BailleurAvocatController::class, 'store'])->name('avocats.store');
+    Route::post('/avocats/{avocat}/toggle-status', [BailleurAvocatController::class, 'toggleStatus'])
+        ->name('avocats.toggle-status');
+    Route::delete('/avocats/{avocat}', [BailleurAvocatController::class, 'destroy'])->name('avocats.destroy');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Avocat Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware(['auth', 'role:avocat'])->prefix('avocat')->name('avocat.')->group(function () {
+    Route::get('/dashboard', [AvocatDashboardController::class, 'index'])->name('dashboard');
+
+    // Bailleurs
+    Route::get('/bailleurs', [AvocatBailleurController::class, 'index'])->name('bailleurs.index');
+    Route::get('/bailleurs/{bailleur}', [AvocatBailleurController::class, 'show'])->name('bailleurs.show');
+    Route::get('/bailleurs/{bailleur}/properties', [AvocatBailleurController::class, 'properties'])
+        ->name('bailleurs.properties');
+    Route::get('/bailleurs/{bailleur}/rentals', [AvocatBailleurController::class, 'rentals'])
+        ->name('bailleurs.rentals');
+
+    // Documents
+    Route::get('/documents/{document}/download', [AvocatDocumentController::class, 'download'])
+        ->name('documents.download');
+    Route::get('/documents/{document}/view', [AvocatDocumentController::class, 'view'])
+        ->name('documents.view');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Shared Authenticated Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware('auth')->group(function () {
+    // Notifications
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('notifications.read');
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->name('notifications.read-all');
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
+
+    // Documents (for bailleur)
+    Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
+    Route::delete('/documents/{document}', [DocumentController::class, 'destroy'])->name('documents.destroy');
+});
+```
+
+```php
+<?php
+// app/Http/Middleware/RoleMiddleware.php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+class RoleMiddleware
+{
+    public function handle(Request $request, Closure $next, string $role): Response
+    {
+        if (!auth()->check()) {
+            return redirect()->route('login');
+        }
+
+        if (auth()->user()->role !== $role) {
+            abort(403, 'Accès non autorisé.');
+        }
+
+        if (!auth()->user()->is_active) {
+            auth()->logout();
+            return redirect()->route('login')->with('error', 'Votre compte a été désactivé.');
+        }
+
+        return $next($request);
+    }
+}
+```
+
+```php
+<?php
+// bootstrap/app.php (ou app/Http/Kernel.php selon la version de Laravel)
+
+// Ajouter dans les alias de middleware :
+// 'role' => \App\Http\Middleware\RoleMiddleware::class,
+```
+
+### 4.c) Policies
+
+```php
+<?php
+// app/Policies/PropertyPolicy.php
+
+namespace App\Policies;
+
+use App\Models\Property;
+use App\Models\User;
+
+class PropertyPolicy
+{
+    public function viewAny(User $user): bool
+    {
+        return $user->isBailleur() || $user->isAdmin();
+    }
+
+    public function view(User $user, Property $property): bool
+    {
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if ($user->isBailleur()) {
+            return $property->user_id === $user->id;
+        }
+
+        if ($user->isAvocat()) {
+            return $user->bailleurs()->where('bailleur_id', $property->user_id)->exists();
+        }
+
+        return false;
+    }
+
+    public function create(User $user): bool
+    {
+        return $user->isBailleur();
+    }
+
+    public function update(User $user, Property $property): bool
+    {
+        return $user->isBailleur() && $property->user_id === $user->id;
+    }
+
+    public function delete(User $user, Property $property): bool
+    {
+        return $user->isBailleur() && $property->user_id === $user->id;
+    }
+}
+```
+
+```php
+<?php
+// app/Policies/TenantPolicy.php
+
+namespace App\Policies;
+
+use App\Models\Tenant;
+use App\Models\User;
+
+class TenantPolicy
+{
+    public function viewAny(User $user): bool
+    {
+        return $user->isBailleur();
+    }
+
+    public function view(User $user, Tenant $tenant): bool
+    {
+        if ($user->isBailleur()) {
+            return $tenant->user_id === $user->id;
+        }
+
+        if ($user->isAvocat()) {
+            return $user->bailleurs()->where('bailleur_id', $tenant->user_id)->exists();
+        }
+
+        return false;
+    }
+
+    public function create(User $user): bool
+    {
+        return $user->isBailleur();
+    }
+
+    public function update(User $user, Tenant $tenant): bool
+    {
+        return $user->isBailleur() && $tenant->user_id === $user->id;
+    }
+
+    public function delete(User $user, Tenant $tenant): bool
+    {
+        return $user->isBailleur() && $tenant->user_id === $user->id;
+    }
+}
+```
+
+```php
+<?php
+// app/Policies/DocumentPolicy.php
+
+namespace App\Policies;
+
+use App\Models\Document;
+use App\Models\User;
+
+class DocumentPolicy
+{
+    public function view(User $user, Document $document): bool
+    {
+        $rental = $document->rental;
+        $property = $rental->property;
+
+        if ($user->isBailleur()) {
+            return $property->user_id === $user->id;
+        }
+
+        if ($user->isAvocat()) {
+            return $user->bailleurs()->where('bailleur_id', $property->user_id)->exists();
+        }
+
+        return false;
+    }
+
+    public function delete(User $user, Document $document): bool
+    {
+        $property = $document->rental->property;
+        return $user->isBailleur() && $property->user_id === $user->id;
+    }
+}
+```
+
+### 4.d) Notifications
+
+```php
+<?php
+// app/Notifications/PropertyCreatedNotification.php
+
+namespace App\Notifications;
+
+use App\Models\Property;
+use App\Models\User;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Notifications\Notification;
+
+class PropertyCreatedNotification extends Notification implements ShouldQueue
+{
+    use Queueable;
+
+    public function __construct(
+        protected Property $property,
+        protected User $bailleur
+    ) {}
+
+    public function via(object $notifiable): array
+    {
+        return ['mail', 'database'];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        return (new MailMessage)
+            ->subject('Nouveau bien mis en location')
+            ->greeting('Bonjour ' . $notifiable->name . ',')
+            ->line('Votre client ' . $this->bailleur->name . ' a ajouté un nouveau bien destiné à la location.')
+            ->line('**Bien :** ' . $this->property->name)
+            ->line('**Type :** ' . $this->property->propertyType->name)
+            ->line('**Adresse :** ' . $this->property->full_address)
+            ->action('Voir les détails', url('/avocat/bailleurs/' . $this->bailleur->id))
+            ->line('Merci de votre confiance.');
+    }
+
+    public function toArray(object $notifiable): array
+    {
+        return [
+            'type' => 'property_created',
+            'property_id' => $this->property->id,
+            'property_name' => $this->property->name,
+            'bailleur_id' => $this->bailleur->id,
+            'bailleur_name' => $this->bailleur->name,
+            'message' => $this->bailleur->name . ' a ajouté un nouveau bien : ' . $this->property->name,
+        ];
+    }
+}
+```
+
+```php
+<?php
+// app/Notifications/RentalCreatedNotification.php
+
+namespace App\Notifications;
+
+use App\Models\Rental;
+use App\Models\User;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Notifications\Notification;
+
+class RentalCreatedNotification extends Notification implements ShouldQueue
+{
+    use Queueable;
+
+    public function __construct(
+        protected Rental $rental,
+        protected User $bailleur
+    ) {}
+
+    public function via(object $notifiable): array
+    {
+        return ['mail', 'database'];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $property = $this->rental->property;
+        $tenant = $this->rental->tenant;
+
+        return (new MailMessage)
+            ->subject('Nouvelle attribution de locataire')
+            ->greeting('Bonjour ' . $notifiable->name . ',')
+            ->line('Votre client ' . $this->bailleur->name . ' a attribué un locataire à un bien.')
+            ->line('**Bien :** ' . $property->name)
+            ->line('**Locataire :** ' . $tenant->full_name)
+            ->line('**Date de début :** ' . $this->rental->start_date->format('d/m/Y'))
+            ->line('**Loyer :** ' . number_format($this->rental->rent_amount, 2, ',', ' ') . ' €')
+            ->action('Voir le contrat', url('/avocat/bailleurs/' . $this->bailleur->id . '/rentals'))
+            ->line('Un contrat de bail a été uploadé dans le système.');
+    }
+
+    public function toArray(object $notifiable): array
+    {
+        return [
+            'type' => 'rental_created',
+            'rental_id' => $this->rental->id,
+            'property_name' => $this->rental->property->name,
+            'tenant_name' => $this->rental->tenant->full_name,
+            'bailleur_id' => $this->bailleur->id,
+            'bailleur_name' => $this->bailleur->name,
+            'message' => $this->bailleur->name . ' a attribué ' . $this->rental->tenant->full_name . 
+                        ' au bien ' . $this->rental->property->name,
+        ];
+    }
+}
+```
+
+```php
+<?php
+// app/Notifications/RentalCancelledNotification.php
+
+namespace App\Notifications;
+
+use App\Models\Rental;
+use App\Models\User;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Notifications\Notification;
+
+class RentalCancelledNotification extends Notification implements ShouldQueue
+{
+    use Queueable;
+
+    public function __construct(
+        protected Rental $rental,
+        protected User $bailleur
+    ) {}
+
+    public function via(object $notifiable): array
+    {
+        return ['mail', 'database'];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $property = $this->rental->property;
+        $tenant = $this->rental->tenant;
+
+        $mail = (new MailMessage)
+            ->subject('Fin de location')
+            ->greeting('Bonjour ' . $notifiable->name . ',')
+            ->line('Votre client ' . $this->bailleur->name . ' a mis fin à une location.')
+            ->line('**Bien :** ' . $property->name)
+            ->line('**Locataire :** ' . $tenant->full_name)
+            ->line('**Date de fin :** ' . now()->format('d/m/Y'));
+
+        if ($this->rental->cancellation_reason) {
+            $mail->line('**Motif :** ' . $this->rental->cancellation_reason);
+        }
+
+        return $mail
+            ->action('Voir les détails', url('/avocat/bailleurs/' . $this->bailleur->id . '/rentals'))
+            ->line('Le bien est maintenant disponible.');
+    }
+
+    public function toArray(object $notifiable): array
+    {
+        return [
+            'type' => 'rental_cancelled',
+            'rental_id' => $this->rental->id,
+            'property_name' => $this->rental->property->name,
+            'tenant_name' => $this->rental->tenant->full_name,
+            'bailleur_id' => $this->bailleur->id,
+            'bailleur_name' => $this->bailleur->name,
+            'reason' => $this->rental->cancellation_reason,
+            'message' => $this->bailleur->name . ' a mis fin à la location de ' . 
+                        $this->rental->tenant->full_name . ' pour le bien ' . $this->rental->property->name,
+        ];
+    }
+}
+```
+
+```php
+<?php
+// app/Notifications/AvocatInvitationNotification.php
+
+namespace App\Notifications;
+
+use App\Models\User;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Notifications\Notification;
+
+class AvocatInvitationNotification extends Notification implements ShouldQueue
+{
+    use Queueable;
+
+    public function __construct(
+        protected User $bailleur,
+        protected string $temporaryPassword
+    ) {}
+
+    public function via(object $notifiable): array
+    {
+        return ['mail'];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        return (new MailMessage)
+            ->subject('Invitation à rejoindre la plateforme de gestion immobilière')
+            ->greeting('Bonjour ' . $notifiable->name . ',')
+            ->line($this->bailleur->name . ' vous a ajouté comme avocat sur sa plateforme de gestion immobilière.')
+            ->line('Vous pouvez désormais suivre les événements liés à ses biens immobiliers.')
+            ->line('Voici vos identifiants de connexion :')
+            ->line('**Email :** ' . $notifiable->email)
+            ->line('**Mot de passe temporaire :** ' . $this->temporaryPassword)
+            ->action('Se connecter', url('/login'))
+            ->line('Nous vous recommandons de changer votre mot de passe après votre première connexion.');
+    }
+}
+```
+
+### 4.d) Vues (Blade Templates)
+
+```php
+{{-- resources/views/layouts/app.blade.php --}}
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>@yield('title', 'Gestion Immobilière')</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    @stack('styles')
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-xl font-bold text-indigo-600">
+                        <i class="fas fa-building mr-2"></i>GestImmo
+                    </a>
+                    
+                    @auth
+                        <div class="hidden md:flex ml-10 space-x-4">
+                            @if(auth()->user()->isAdmin())
+                                <a href="{{ route('admin.dashboard') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Tableau de bord
+                                </a>
+                                <a href="{{ route('admin.property-types.index') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Types de biens
+                                </a>
+                                <a href="{{ route('admin.users.index') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Utilisateurs
+                                </a>
+                            @elseif(auth()->user()->isBailleur())
+                                <a href="{{ route('bailleur.dashboard') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Tableau de bord
+                                </a>
+                                <a href="{{ route('bailleur.properties.index') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Mes biens
+                                </a>
+                                <a href="{{ route('bailleur.tenants.index') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Locataires
+                                </a>
+                                <a href="{{ route('bailleur.rentals.index') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Locations
+                                </a>
+                                <a href="{{ route('bailleur.avocats.index') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Mes avocats
+                                </a>
+                            @elseif(auth()->user()->isAvocat())
+                                <a href="{{ route('avocat.dashboard') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Tableau de bord
+                                </a>
+                                <a href="{{ route('avocat.bailleurs.index') }}" class="text-gray-700 hover:text-indigo-600 px-3 py-2">
+                                    Mes clients
+                                </a>
+                            @endif
+                        </div>
+                    @endauth
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    @auth
+                        {{-- Notifications --}}
+                        <div class="relative">
+                            <a href="{{ route('notifications.index') }}" class="text-gray-600 hover:text-indigo-600 relative">
+                                <i class="fas fa-bell text-xl"></i>
+                                @if(auth()->user()->unreadNotifications->count() > 0)
+                                    <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                        {{ auth()->user()->unreadNotifications->count() }}
+                                    </span>
+                                @endif
+                            </a>
+                        </div>
+                        
+                        <div class="flex items-center space-x-2">
+                            <span class="text-gray-700">{{ auth()->user()->name }}</span>
+                            <span class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded">
+                                {{ ucfirst(auth()->user()->role) }}
+                            </span>
+                        </div>
+                        
+                        <form action="{{ route('logout') }}" method="POST" class="inline">
+                            @csrf
+                            <button type="submit" class="text-gray-600 hover:text-red-600">
+                                <i class="fas fa-sign-out-alt"></i>
+                            </button>
+                        </form>
+                    @else
+                        <a href="{{ route('login') }}" class="text-gray-700 hover:text-indigo-600">Connexion</a>
+                        <a href="{{ route('register') }}" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+                            Inscription
+                        </a>
+                    @endauth
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="py-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {{-- Flash Messages --}}
+            @if(session('success'))
+                <div class="mb-6 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+                    <span class="block sm:inline">{{ session('success') }}</span>
+                </div>
+            @endif
+
+            @if(session('error'))
+                <div class="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <span class="block sm:inline">{{ session('error') }}</span>
+                </div>
+            @endif
+
+            @if($errors->any())
+                <div class="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <ul class="list-disc list-inside">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            @yield('content')
+        </div>
+    </main>
+
+    <footer class="bg-white border-t mt-auto py-6">
+        <div class="max-w-7xl mx-auto px-4 text-center text-gray-500">
+            &copy; {{ date('Y') }} GestImmo - Système de Gestion Immobilière
+        </div>
+    </footer>
+
+    @stack('scripts')
+</body>
+</html>
+```
+
+```php
+{{-- resources/views/auth/login.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Connexion')
+
+@section('content')
+<div class="min-h-[70vh] flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+        <h2 class="text-2xl font-bold text-center mb-6">
+            <i class="fas fa-sign-in-alt text-indigo-600 mr-2"></i>Connexion
+        </h2>
+
+        <form method="POST" action="{{ route('login') }}">
+            @csrf
+
+            <div class="mb-4">
+                <label for="email" class="block text-gray-700 font-medium mb-2">Email</label>
+                <input type="email" name="email" id="email" value="{{ old('email') }}" required
+                       class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 @error('email') border-red-500 @enderror">
+                @error('email')
+                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <div class="mb-4">
+                <label for="password" class="block text-gray-700 font-medium mb-2">Mot de passe</label>
+                <input type="password" name="password" id="password" required
+                       class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+
+            <div class="mb-6">
+                <label class="flex items-center">
+                    <input type="checkbox" name="remember" class="rounded text-indigo-600">
+                    <span class="ml-2 text-gray-600">Se souvenir de moi</span>
+                </label>
+            </div>
+
+            <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition">
+                Se connecter
+            </button>
+        </form>
+
+        <p class="text-center mt-6 text-gray-600">
+            Pas encore de compte ? 
+            <a href="{{ route('register') }}" class="text-indigo-600 hover:underline">S'inscrire</a>
+        </p>
+    </div>
+</div>
+@endsection
+```
+
+```php
+{{-- resources/views/auth/register.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Inscription')
+
+@section('content')
+<div class="min-h-[70vh] flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+        <h2 class="text-2xl font-bold text-center mb-6">
+            <i class="fas fa-user-plus text-indigo-600 mr-2"></i>Inscription
+        </h2>
+
+        <form method="POST" action="{{ route('register') }}">
+            @csrf
+
+            <div class="mb-4">
+                <label for="name" class="block text-gray-700 font-medium mb-2">Nom complet</label>
+                <input type="text" name="name" id="name" value="{{ old('name') }}" required
+                       class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div class="mb-4">
+                <label for="email" class="block text-gray-700 font-medium mb-2">Email</label>
+                <input type="email" name="email" id="email" value="{{ old('email') }}" required
+                       class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div class="mb-4">
+                <label for="phone" class="block text-gray-700 font-medium mb-2">Téléphone</label>
+                <input type="text" name="phone" id="phone" value="{{ old('phone') }}"
+                       class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-gray-700 font-medium mb-2">Type de compte</label>
+                <div class="flex space-x-4">
+                    <label class="flex items-center">
+                        <input type="radio" name="role" value="bailleur" {{ old('role', 'bailleur') === 'bailleur' ? 'checked' : '' }}
+                               class="text-indigo-600">
+                        <span class="ml-2">Bailleur</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="role" value="avocat" {{ old('role') === 'avocat' ? 'checked' : '' }}
+                               class="text-indigo-600">
+                        <span class="ml-2">Avocat</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label for="password" class="block text-gray-700 font-medium mb-2">Mot de passe</label>
+                <input type="password" name="password" id="password" required
+                       class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div class="mb-6">
+                <label for="password_confirmation" class="block text-gray-700 font-medium mb-2">Confirmer le mot de passe</label>
+                <input type="password" name="password_confirmation" id="password_confirmation" required
+                       class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition">
+                S'inscrire
+            </button>
+        </form>
+
+        <p class="text-center mt-6 text-gray-600">
+            Déjà un compte ? 
+            <a href="{{ route('login') }}" class="text-indigo-600 hover:underline">Se connecter</a>
+        </p>
+    </div>
+</div>
+@endsection
+```
+
+```php
+{{-- resources/views/bailleur/dashboard.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Tableau de bord - Bailleur')
+
+@section('content')
+<div class="mb-6">
+    <h1 class="text-3xl font-bold text-gray-800">
+        <i class="fas fa-tachometer-alt text-indigo-600 mr-2"></i>Tableau de bord
+    </h1>
+    <p class="text-gray-600 mt-2">Bienvenue, {{ auth()->user()->name }}</p>
+</div>
+
+{{-- Statistiques --}}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="p-3 bg-blue-100 rounded-full">
+                <i class="fas fa-building text-blue-600 text-xl"></i>
+            </div>
+            <div class="ml-4">
+                <p class="text-gray-500 text-sm">Total biens</p>
+                <p class="text-2xl font-bold text-gray-800">{{ $stats['total_properties'] }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="p-3 bg-green-100 rounded-full">
+                <i class="fas fa-check-circle text-green-600 text-xl"></i>
+            </div>
+            <div class="ml-4">
+                <p class="text-gray-500 text-sm">Disponibles</p>
+                <p class="text-2xl font-bold text-gray-800">{{ $stats['available_properties'] }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="p-3 bg-yellow-100 rounded-full">
+                <i class="fas fa-key text-yellow-600 text-xl"></i>
+            </div>
+            <div class="ml-4">
+                <p class="text-gray-500 text-sm">Loués</p>
+                <p class="text-2xl font-bold text-gray-800">{{ $stats['rented_properties'] }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="p-3 bg-purple-100 rounded-full">
+                <i class="fas fa-users text-purple-600 text-xl"></i>
+            </div>
+            <div class="ml-4">
+                <p class="text-gray-500 text-sm">Locataires</p>
+                <p class="text-2xl font-bold text-gray-800">{{ $stats['total_tenants'] }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="p-3 bg-indigo-100 rounded-full">
+                <i class="fas fa-file-contract text-indigo-600 text-xl"></i>
+            </div>
+            <div class="ml-4">
+                <p class="text-gray-500 text-sm">Locations actives</p>
+                <p class="text-2xl font-bold text-gray-800">{{ $stats['active_rentals'] }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Actions rapides --}}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <a href="{{ route('bailleur.properties.create') }}" 
+       class="bg-indigo-600 text-white rounded-lg p-6 hover:bg-indigo-700 transition flex items-center justify-center">
+        <i class="fas fa-plus-circle text-2xl mr-3"></i>
+        <span class="text-lg font-medium">Ajouter un bien</span>
+    </a>
+    <a href="{{ route('bailleur.rentals.create') }}" 
+       class="bg-green-600 text-white rounded-lg p-6 hover:bg-green-700 transition flex items-center justify-center">
+        <i class="fas fa-handshake text-2xl mr-3"></i>
+        <span class="text-lg font-medium">Nouvelle location</span>
+    </a>
+    <a href="{{ route('bailleur.avocats.create') }}" 
+       class="bg-purple-600 text-white rounded-lg p-6 hover:bg-purple-700 transition flex items-center justify-center">
+        <i class="fas fa-user-tie text-2xl mr-3"></i>
+        <span class="text-lg font-medium">Associer un avocat</span>
+    </a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    {{-- Biens récents --}}
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-6 border-b">
+            <h2 class="text-xl font-bold text-gray-800">
+                <i class="fas fa-building text-indigo-600 mr-2"></i>Biens récents
+            </h2>
+        </div>
+        <div class="p-6">
+            @if($recentProperties->isEmpty())
+                <p class="text-gray-500 text-center py-4">Aucun bien enregistré</p>
+            @else
+                <div class="space-y-4">
+                    @foreach($recentProperties as $property)
+                        <a href="{{ route('bailleur.properties.show', $property) }}" 
+                           class="block p-4 border rounded-lg hover:bg-gray-50 transition">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="font-medium text-gray-800">{{ $property->name }}</h3>
+                                    <p class="text-sm text-gray-500">{{ $property->propertyType->name }}</p>
+                                    @if($property->full_address)
+                                        <p class="text-sm text-gray-400">{{ $property->full_address }}</p>
+                                    @endif
+                                </div>
+                                <span class="px-2 py-1 text-xs rounded-full 
+                                    {{ $property->status === 'available' ? 'bg-green-100 text-green-800' : 
+                                       ($property->status === 'rented' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800') }}">
+                                    {{ $property->status === 'available' ? 'Disponible' : 
+                                       ($property->status === 'rented' ? 'Loué' : 'Indisponible') }}
+                                </span>
+                            </div>
+                        </a>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </div>
+
+    {{-- Locations actives --}}
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-6 border-b">
+            <h2 class="text-xl font-bold text-gray-800">
+                <i class="fas fa-file-contract text-green-600 mr-2"></i>Locations actives
+            </h2>
+        </div>
+        <div class="p-6">
+            @if($activeRentals->isEmpty())
+                <p class="text-gray-500 text-center py-4">Aucune location active</p>
+            @else
+                <div class="space-y-4">
+                    @foreach($activeRentals as $rental)
+                        <a href="{{ route('bailleur.rentals.show', $rental) }}" 
+                           class="block p-4 border rounded-lg hover:bg-gray-50 transition">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="font-medium text-gray-800">{{ $rental->property->name }}</h3>
+                                    <p class="text-sm text-gray-500">
+                                        <i class="fas fa-user mr-1"></i>{{ $rental->tenant->full_name }}
+                                    </p>
+                                    <p class="text-sm text-gray-400">
+                                        Depuis le {{ $rental->start_date->format('d/m/Y') }}
+                                    </p>
+                                </div>
+                                <span class="text-indigo-600 font-medium">
+                                    {{ number_format($rental->rent_amount, 0, ',', ' ') }} €/mois
+                                </span>
+                            </div>
+                        </a>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </div>
+</div>
+
+{{-- Avocats associés --}}
+@if($avocats->isNotEmpty())
+<div class="mt-8 bg-white rounded-lg shadow">
+    <div class="p-6 border-b">
+        <h2 class="text-xl font-bold text-gray-800">
+            <i class="fas fa-user-tie text-purple-600 mr-2"></i>Mes avocats
+        </h2>
+    </div>
+    <div class="p-6">
+        <div class="flex flex-wrap gap-4">
+            @foreach($avocats as $avocat)
+                <div class="flex items-center bg-gray-50 rounded-lg p-4">
+                    <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-user-tie text-purple-600"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="font-medium text-gray-800">{{ $avocat->name }}</p>
+                        <p class="text-sm text-gray-500">{{ $avocat->email }}</p>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+</div>
+@endif
+@endsection
+```
+
+```php
+{{-- resources/views/bailleur/properties/index.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Mes biens')
+
+@section('content')
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold text-gray-800">
+        <i class="fas fa-building text-indigo-600 mr-2"></i>Mes biens
+    </h1>
+    <a href="{{ route('bailleur.properties.create') }}" 
+       class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
+        <i class="fas fa-plus mr-2"></i>Ajouter un bien
+    </a>
+</div>
+
+{{-- Filtres --}}
+<div class="bg-white rounded-lg shadow p-4 mb-6">
+    <form action="{{ route('bailleur.properties.index') }}" method="GET" class="flex flex-wrap gap-4">
+        <div class="flex-1 min-w-[200px]">
+            <input type="text" name="search" value="{{ request('search') }}" placeholder="Rechercher..."
+                   class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div class="w-48">
+            <select name="type" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                <option value="">Tous les types</option>
+                @foreach($propertyTypes as $type)
+                    <option value="{{ $type->id }}" {{ request('type') == $type->id ? 'selected' : '' }}>
+                        {{ $type->name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+        <div class="w-48">
+            <select name="status" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                <option value="">Tous les statuts</option>
+                <option value="available" {{ request('status') === 'available' ? 'selected' : '' }}>Disponible</option>
+                <option value="rented" {{ request('status') === 'rented' ? 'selected' : '' }}>Loué</option>
+                <option value="unavailable" {{ request('status') === 'unavailable' ? 'selected' : '' }}>Indisponible</option>
+            </select>
+        </div>
+        <button type="submit" class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
+            <i class="fas fa-search mr-2"></i>Filtrer
+        </button>
+    </form>
+</div>
+
+{{-- Liste des biens --}}
+<div class="bg-white rounded-lg shadow overflow-hidden">
+    @if($properties->isEmpty())
+        <div class="p-8 text-center text-gray-500">
+            <i class="fas fa-building text-4xl mb-4"></i>
+            <p>Aucun bien trouvé</p>
+            <a href="{{ route('bailleur.properties.create') }}" class="text-indigo-600 hover:underline mt-2 inline-block">
+                Ajouter votre premier bien
+            </a>
+        </div>
+    @else
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bien</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Localisation</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                @foreach($properties as $property)
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="font-medium text-gray-900">{{ $property->name }}</div>
+                            @if($property->surface)
+                                <div class="text-sm text-gray-500">{{ $property->surface }} m²</div>
+                            @endif
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs bg-indigo-100 text-indigo-800 rounded-full">
+                                {{ $property->propertyType->name }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            @if($property->full_address)
+                                <div class="text-sm text-gray-900">{{ $property->city }}</div>
+                                <div class="text-sm text-gray-500">{{ $property->address }}</div>
+                            @else
+                                <span class="text-gray-400">-</span>
+                            @endif
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs rounded-full 
+                                {{ $property->status === 'available' ? 'bg-green-100 text-green-800' : 
+                                   ($property->status === 'rented' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800') }}">
+                                {{ $property->status === 'available' ? 'Disponible' : 
+                                   ($property->status === 'rented' ? 'Loué' : 'Indisponible') }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            @if($property->is_for_rent)
+                                <span class="text-green-600"><i class="fas fa-check"></i> À louer</span>
+                            @else
+                                <span class="text-gray-400">-</span>
+                            @endif
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <a href="{{ route('bailleur.properties.show', $property) }}" 
+                               class="text-indigo-600 hover:text-indigo-900 mr-3">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="{{ route('bailleur.properties.edit', $property) }}" 
+                               class="text-yellow-600 hover:text-yellow-900 mr-3">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            @if($property->isAvailable() && $property->is_for_rent)
+                                <a href="{{ route('bailleur.rentals.create', ['property_id' => $property->id]) }}" 
+                                   class="text-green-600 hover:text-green-900 mr-3" title="Attribuer un locataire">
+                                    <i class="fas fa-user-plus"></i>
+                                </a>
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+
+        <div class="px-6 py-4 border-t">
+            {{ $properties->links() }}
+        </div>
+    @endif
+</div>
+@endsection
+```
+
+```php
+{{-- resources/views/bailleur/properties/create.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Ajouter un bien')
+
+@section('content')
+<div class="max-w-3xl mx-auto">
+    <div class="mb-6">
+        <a href="{{ route('bailleur.properties.index') }}" class="text-indigo-600 hover:underline">
+            <i class="fas fa-arrow-left mr-2"></i>Retour à la liste
+        </a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">
+            <i class="fas fa-plus-circle text-indigo-600 mr-2"></i>Ajouter un bien
+        </h1>
+
+        <form action="{{ route('bailleur.properties.store') }}" method="POST" id="propertyForm">
+            @csrf
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="name" class="block text-gray-700 font-medium mb-2">Nom du bien *</label>
+                    <input type="text" name="name" id="name" value="{{ old('name') }}" required
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div>
+                    <label for="property_type_id" class="block text-gray-700 font-medium mb-2">Type de bien *</label>
+                    <select name="property_type_id" id="property_type_id" required
+                            class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        <option value="">Sélectionnez un type</option>
+                        @foreach($propertyTypes as $type)
+                            <option value="{{ $type->id }}" 
+                                    data-requires-address="{{ $type->requires_address ? '1' : '0' }}"
+                                    {{ old('property_type_id') == $type->id ? 'selected' : '' }}>
+                                {{ $type->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="mt-6">
+                <label for="description" class="block text-gray-700 font-medium mb-2">Description</label>
+                <textarea name="description" id="description" rows="3"
+                          class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">{{ old('description') }}</textarea>
+            </div>
+
+            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="surface" class="block text-gray-700 font-medium mb-2">Surface (m²)</label>
+                    <input type="number" step="0.01" name="surface" id="surface" value="{{ old('surface') }}"
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div>
+                    <label for="rooms" class="block text-gray-700 font-medium mb-2">Nombre de pièces</label>
+                    <input type="number" name="rooms" id="rooms" value="{{ old('rooms') }}"
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            {{-- Adresse (conditionnel) --}}
+            <div id="addressFields" class="mt-6 border-t pt-6">
+                <h3 class="text-lg font-medium text-gray-800 mb-4">
+                    <i class="fas fa-map-marker-alt text-red-500 mr-2"></i>Localisation
+                </h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="md:col-span-2">
+                        <label for="address" class="block text-gray-700 font-medium mb-2">Adresse</label>
+                        <input type="text" name="address" id="address" value="{{ old('address') }}"
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <div>
+                        <label for="city" class="block text-gray-700 font-medium mb-2">Ville</label>
+                        <input type="text" name="city" id="city" value="{{ old('city') }}"
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <div>
+                        <label for="postal_code" class="block text-gray-700 font-medium mb-2">Code postal</label>
+                        <input type="text" name="postal_code" id="postal_code" value="{{ old('postal_code') }}"
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <div>
+                        <label for="country" class="block text-gray-700 font-medium mb-2">Pays</label>
+                        <input type="text" name="country" id="country" value="{{ old('country', 'France') }}"
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 border-t pt-6">
+                <label class="flex items-center">
+                    <input type="checkbox" name="is_for_rent" value="1" {{ old('is_for_rent') ? 'checked' : '' }}
+                           class="rounded text-indigo-600 focus:ring-indigo-500">
+                    <span class="ml-2 text-gray-700">Ce bien est destiné à la location</span>
+                </label>
+                <p class="text-sm text-gray-500 mt-1">
+                    Si coché, vos avocats associés seront notifiés de l'ajout de ce bien.
+                </p>
+            </div>
+
+            <div class="mt-8 flex justify-end space-x-4">
+                <a href="{{ route('bailleur.properties.index') }}" 
+                   class="px-6 py-2 border rounded-lg text-gray-700 hover:bg-gray-50">
+                    Annuler
+                </a>
+                <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                    <i class="fas fa-save mr-2"></i>Enregistrer
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const typeSelect = document.getElementById('property_type_id');
+    const addressFields = document.getElementById('addressFields');
+    const addressInputs = addressFields.querySelectorAll('input');
+
+    function toggleAddressFields() {
+        const selectedOption = typeSelect.options[typeSelect.selectedIndex];
+        const requiresAddress = selectedOption.dataset.requiresAddress === '1';
+
+        if (requiresAddress) {
+            addressFields.style.display = 'block';
+            document.getElementById('address').required = true;
+            document.getElementById('city').required = true;
+            document.getElementById('postal_code').required = true;
+        } else {
+            addressFields.style.display = 'block'; // Toujours afficher mais optionnel
+            document.getElementById('address').required = false;
+            document.getElementById('city').required = false;
+            document.getElementById('postal_code').required = false;
+        }
+    }
+
+    typeSelect.addEventListener('change', toggleAddressFields);
+    toggleAddressFields();
+});
+</script>
+@endpush
+@endsection
+```
+
+```php
+{{-- resources/views/bailleur/rentals/create.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Nouvelle location')
+
+@section('content')
+<div class="max-w-4xl mx-auto">
+    <div class="mb-6">
+        <a href="{{ route('bailleur.rentals.index') }}" class="text-indigo-600 hover:underline">
+            <i class="fas fa-arrow-left mr-2"></i>Retour à la liste
+        </a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">
+            <i class="fas fa-handshake text-green-600 mr-2"></i>Attribuer un locataire
+        </h1>
+
+        <form action="{{ route('bailleur.rentals.store') }}" method="POST" enctype="multipart/form-data">
+            @csrf
+
+            {{-- Sélection du bien --}}
+            <div class="mb-6">
+                <label for="property_id" class="block text-gray-700 font-medium mb-2">Bien à louer *</label>
+                <select name="property_id" id="property_id" required
+                        class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    <option value="">Sélectionnez un bien</option>
+                    @foreach($properties as $property)
+                        <option value="{{ $property->id }}" 
+                                {{ $selectedProperty && $selectedProperty->id == $property->id ? 'selected' : '' }}>
+                            {{ $property->name }} ({{ $property->propertyType->name }})
+                            @if($property->city) - {{ $property->city }} @endif
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            {{-- Sélection ou création du locataire --}}
+            <div class="border-t pt-6 mb-6">
+                <h3 class="text-lg font-medium text-gray-800 mb-4">
+                    <i class="fas fa-user text-blue-500 mr-2"></i>Locataire
+                </h3>
+
+                <div class="mb-4">
+                    <label class="flex items-center mb-4">
+                        <input type="radio" name="tenant_type" value="existing" checked
+                               class="text-indigo-600" onchange="toggleTenantForm()">
+                        <span class="ml-2">Locataire existant</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="tenant_type" value="new"
+                               class="text-indigo-600" onchange="toggleTenantForm()">
+                        <span class="ml-2">Nouveau locataire</span>
+                    </label>
+                </div>
+
+                {{-- Locataire existant --}}
+                <div id="existingTenantForm">
+                    <select name="tenant_id" id="tenant_id"
+                            class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        <option value="">Sélectionnez un locataire</option>
+                        @foreach($tenants as $tenant)
+                            <option value="{{ $tenant->id }}">
+                                {{ $tenant->full_name }} - {{ $tenant->phone }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                {{-- Nouveau locataire --}}
+                <div id="newTenantForm" class="hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Prénom *</label>
+                            <input type="text" name="new_tenant[first_name]" value="{{ old('new_tenant.first_name') }}"
+                                   class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Nom *</label>
+                            <input type="text" name="new_tenant[last_name]" value="{{ old('new_tenant.last_name') }}"
+                                   class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Téléphone *</label>
+                            <input type="text" name="new_tenant[phone]" value="{{ old('new_tenant.phone') }}"
+                                   class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Email</label>
+                            <input type="email" name="new_tenant[email]" value="{{ old('new_tenant.email') }}"
+                                   class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Détails de la location --}}
+            <div class="border-t pt-6 mb-6">
+                <h3 class="text-lg font-medium text-gray-800 mb-4">
+                    <i class="fas fa-file-contract text-purple-500 mr-2"></i>Détails de la location
+                </h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="start_date" class="block text-gray-700 font-medium mb-2">Date de début *</label>
+                        <input type="date" name="start_date" id="start_date" value="{{ old('start_date') }}" required
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label for="end_date" class="block text-gray-700 font-medium mb-2">Date de fin</label>
+                        <input type="date" name="end_date" id="end_date" value="{{ old('end_date') }}"
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label for="rent_amount" class="block text-gray-700 font-medium mb-2">Loyer (€) *</label>
+                        <input type="number" step="0.01" name="rent_amount" id="rent_amount" 
+                               value="{{ old('rent_amount') }}" required
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label for="deposit_amount" class="block text-gray-700 font-medium mb-2">Dépôt de garantie (€)</label>
+                        <input type="number" step="0.01" name="deposit_amount" id="deposit_amount" 
+                               value="{{ old('deposit_amount') }}"
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label for="payment_frequency" class="block text-gray-700 font-medium mb-2">Fréquence de paiement *</label>
+                        <select name="payment_frequency" id="payment_frequency" required
+                                class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                            <option value="monthly" {{ old('payment_frequency') === 'monthly' ? 'selected' : '' }}>Mensuel</option>
+                            <option value="quarterly" {{ old('payment_frequency') === 'quarterly' ? 'selected' : '' }}>Trimestriel</option>
+                            <option value="yearly" {{ old('payment_frequency') === 'yearly' ? 'selected' : '' }}>Annuel</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <label for="notes" class="block text-gray-700 font-medium mb-2">Notes</label>
+                    <textarea name="notes" id="notes" rows="3"
+                              class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">{{ old('notes') }}</textarea>
+                </div>
+            </div>
+
+            {{-- Contrat de bail --}}
+            <div class="border-t pt-6 mb-6">
+                <h3 class="text-lg font-medium text-gray-800 mb-4">
+                    <i class="fas fa-file-upload text-red-500 mr-2"></i>Contrat de bail *
+                </h3>
+                
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <input type="file" name="lease_contract" id="lease_contract" required
+                           accept=".pdf,.jpg,.jpeg,.png"
+                           class="hidden" onchange="updateFileName(this)">
+                    <label for="lease_contract" class="cursor-pointer">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-2"></i>
+                        <p class="text-gray-600">Cliquez pour uploader le contrat de bail</p>
+                        <p class="text-sm text-gray-400 mt-1">PDF, JPG, PNG (max 10 Mo)</p>
+                    </label>
+                    <p id="fileName" class="mt-2 text-indigo-600 font-medium hidden"></p>
+                </div>
+
+                {{-- Option capture photo --}}
+                <div class="mt-4 text-center">
+                    <button type="button" onclick="openCamera()" 
+                            class="text-indigo-600 hover:underline">
+                        <i class="fas fa-camera mr-2"></i>Ou capturer une photo
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end space-x-4">
+                <a href="{{ route('bailleur.rentals.index') }}" 
+                   class="px-6 py-2 border rounded-lg text-gray-700 hover:bg-gray-50">
+                    Annuler
+                </a>
+                <button type="submit" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                    <i class="fas fa-check mr-2"></i>Créer la location
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- Modal Capture Photo --}}
+<div id="cameraModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+        <h3 class="text-lg font-bold mb-4">Capturer une photo du contrat</h3>
+        <video id="cameraFeed" class="w-full rounded-lg mb-4" autoplay></video>
+        <canvas id="photoCanvas" class="hidden"></canvas>
+        <div class="flex justify-end space-x-4">
+            <button type="button" onclick="closeCamera()" class="px-4 py-2 border rounded-lg">Annuler</button>
+            <button type="button" onclick="capturePhoto()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">
+                <i class="fas fa-camera mr-2"></i>Capturer
+            </button>
+        </div>
+    </div>
+</div>
+
+@push('scripts')
+<script>
+function toggleTenantForm() {
+    const tenantType = document.querySelector('input[name="tenant_type"]:checked').value;
+    const existingForm = document.getElementById('existingTenantForm');
+    const newForm = document.getElementById('newTenantForm');
+
+    if (tenantType === 'existing') {
+        existingForm.classList.remove('hidden');
+        newForm.classList.add('hidden');
+    } else {
+        existingForm.classList.add('hidden');
+        newForm.classList.remove('hidden');
+    }
+}
+
+function updateFileName(input) {
+    const fileName = document.getElementById('fileName');
+    if (input.files.length > 0) {
+        fileName.textContent = input.files[0].name;
+        fileName.classList.remove('hidden');
+    } else {
+        fileName.classList.add('hidden');
+    }
+}
+
+let stream = null;
+
+function openCamera() {
+    const modal = document.getElementById('cameraModal');
+    const video = document.getElementById('cameraFeed');
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(s => {
+            stream = s;
+            video.srcObject = stream;
+            modal.classList.remove('hidden');
+        })
+        .catch(err => {
+            alert('Impossible d\'accéder à la caméra: ' + err.message);
+        });
+}
+
+function closeCamera() {
+    const modal = document.getElementById('cameraModal');
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+    }
+    modal.classList.add('hidden');
+}
+
+function capturePhoto() {
+    const video = document.getElementById('cameraFeed');
+    const canvas = document.getElementById('photoCanvas');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    canvas.toBlob(blob => {
+        const file = new File([blob], 'contrat_photo.jpg', { type: 'image/jpeg' });
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        document.getElementById('lease_contract').files = dataTransfer.files;
+        updateFileName(document.getElementById('lease_contract'));
+        closeCamera();
+    }, 'image/jpeg', 0.9);
+}
+</script>
+@endpush
+@endsection
+```
+
+```php
+{{-- resources/views/avocat/dashboard.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Tableau de bord - Avocat')
+
+@section('content')
+<div class="mb-6">
+    <h1 class="text-3xl font-bold text-gray-800">
+        <i class="fas fa-tachometer-alt text-purple-600 mr-2"></i>Tableau de bord Avocat
+    </h1>
+    <p class="text-gray-600 mt-2">Bienvenue, Maître {{ auth()->user()->name }}</p>
+</div>
+
+{{-- Statistiques --}}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="p-3 bg-blue-100 rounded-full">
+                <i class="fas fa-users text-blue-600 text-xl"></i>
+            </div>
+            <div class="ml-4">
+                <p class="text-gray-500 text-sm">Clients bailleurs</p>
+                <p class="text-2xl font-bold text-gray-800">{{ $stats['total_bailleurs'] }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="p-3 bg-green-100 rounded-full">
+                <i class="fas fa-building text-green-600 text-xl"></i>
+            </div>
+            <div class="ml-4">
+                <p class="text-gray-500 text-sm">Biens suivis</p>
+                <p class="text-2xl font-bold text-gray-800">{{ $stats['total_properties'] }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="p-3 bg-yellow-100 rounded-full">
+                <i class="fas fa-file-contract text-yellow-600 text-xl"></i>
+            </div>
+            <div class="ml-4">
+                <p class="text-gray-500 text-sm">Locations actives</p>
+                <p class="text-2xl font-bold text-gray-800">{{ $stats['active_rentals'] }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    {{-- Clients bailleurs --}}
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-6 border-b">
+            <h2 class="text-xl font-bold text-gray-800">
+                <i class="fas fa-users text-blue-600 mr-2"></i>Mes clients bailleurs
+            </h2>
+        </div>
+        <div class="p-6">
+            @if($bailleurs->isEmpty())
+                <p class="text-gray-500 text-center py-4">Aucun client bailleur associé</p>
+            @else
+                <div class="space-y-4">
+                    @foreach($bailleurs as $bailleur)
+                        <a href="{{ route('avocat.bailleurs.show', $bailleur) }}" 
+                           class="block p-4 border rounded-lg hover:bg-gray-50 transition">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="font-medium text-gray-800">{{ $bailleur->name }}</h3>
+                                    <p class="text-sm text-gray-500">{{ $bailleur->email }}</p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-sm text-gray-600">
+                                        {{ $bailleur->properties_count ?? 0 }} biens
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </div>
+
+    {{-- Événements récents --}}
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-6 border-b">
+            <h2 class="text-xl font-bold text-gray-800">
+                <i class="fas fa-bell text-yellow-600 mr-2"></i>Événements récents
+            </h2>
+        </div>
+        <div class="p-6">
+            @if($recentEvents->isEmpty())
+                <p class="text-gray-500 text-center py-4">Aucun événement récent</p>
+            @else
+                <div class="space-y-4">
+                    @foreach($recentEvents as $event)
+                        <div class="p-4 border rounded-lg 
+                            {{ $event['type'] === 'rental_created' ? 'border-l-4 border-green-500' : 
+                               ($event['type'] === 'rental_ended' ? 'border-l-4 border-red-500' : 'border-l-4 border-blue-500') }}">
+                            <div class="flex items-start">
+                                <div class="flex-shrink-0">
+                                    @if($event['type'] === 'rental_created')
+                                        <i class="fas fa-handshake text-green-500"></i>
+                                    @elseif($event['type'] === 'rental_ended')
+                                        <i class="fas fa-times-circle text-red-500"></i>
+                                    @else
+                                        <i class="fas fa-plus-circle text-blue-500"></i>
+                                    @endif
+                                </div>
+                                <div class="ml-3">
+                                    @if($event['type'] === 'rental_created')
+                                        <p class="text-gray-800">
+                                            Nouvelle location : <strong>{{ $event['data']->property->name }}</strong>
+                                        </p>
+                                        <p class="text-sm text-gray-500">
+                                            Locataire : {{ $event['data']->tenant->full_name }}
+                                        </p>
+                                    @elseif($event['type'] === 'rental_ended')
+                                        <p class="text-gray-800">
+                                            Fin de location : <strong>{{ $event['data']->property->name }}</strong>
+                                        </p>
+                                    @else
+                                        <p class="text-gray-800">
+                                            Nouveau bien : <strong>{{ $event['data']->name }}</strong>
+                                        </p>
+                                        <p class="text-sm text-gray-500">
+                                            Par {{ $event['data']->owner->name }}
+                                        </p>
+                                    @endif
+                                    <p class="text-xs text-gray-400 mt-1">
+                                        {{ $event['date']->diffForHumans() }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+```php
+{{-- resources/views/notifications/index.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Notifications')
+
+@section('content')
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold text-gray-800">
+        <i class="fas fa-bell text-yellow-600 mr-2"></i>Notifications
+    </h1>
+    @if(auth()->user()->unreadNotifications->count() > 0)
+        <form action="{{ route('notifications.read-all') }}" method="POST">
+            @csrf
+            <button type="submit" class="text-indigo-600 hover:underline">
+                <i class="fas fa-check-double mr-1"></i>Tout marquer comme lu
+            </button>
+        </form>
+    @endif
+</div>
+
+<div class="bg-white rounded-lg shadow">
+    @if($notifications->isEmpty())
+        <div class="p-8 text-center text-gray-500">
+            <i class="fas fa-bell-slash text-4xl mb-4"></i>
+            <p>Aucune notification</p>
+        </div>
+    @else
+        <div class="divide-y">
+            @foreach($notifications as $notification)
+                <div class="p-4 {{ $notification->read_at ? 'bg-white' : 'bg-blue-50' }} hover:bg-gray-50">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0 mt-1">
+                                @php
+                                    $type = $notification->data['type'] ?? 'default';
+                                @endphp
+                                @if($type === 'property_created')
+                                    <i class="fas fa-building text-blue-500"></i>
+                                @elseif($type === 'rental_created')
+                                    <i class="fas fa-handshake text-green-500"></i>
+                                @elseif($type === 'rental_cancelled')
+                                    <i class="fas fa-times-circle text-red-500"></i>
+                                @else
+                                    <i class="fas fa-info-circle text-gray-500"></i>
+                                @endif
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-gray-800">{{ $notification->data['message'] ?? 'Notification' }}</p>
+                                <p class="text-xs text-gray-400 mt-1">
+                                    {{ $notification->created_at->diffForHumans() }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            @if(!$notification->read_at)
+                                <form action="{{ route('notifications.read', $notification->id) }}" method="POST">
+                                    @csrf
+                                    <button type="submit" class="text-indigo-600 hover:text-indigo-800" title="Marquer comme lu">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </form>
+                            @endif
+                            <form action="{{ route('notifications.destroy', $notification->id) }}" method="POST">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="text-red-600 hover:text-red-800" title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+
+        <div class="p-4 border-t">
+            {{ $notifications->links() }}
+        </div>
+    @endif
+</div>
+@endsection
+```
+
+---
+
+## Seeders pour les données initiales
+
+```php
+<?php
+// database/seeders/PropertyTypeSeeder.php
+
+namespace Database\Seeders;
+
+use App\Models\PropertyType;
+use Illuminate\Database\Seeder;
+
+class PropertyTypeSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $types = [
+            ['name' => 'Maison', 'requires_address' => true],
+            ['name' => 'Appartement', 'requires_address' => true],
+            ['name' => 'Studio', 'requires_address' => true],
+            ['name' => 'Loft', 'requires_address' => true],
+            ['name' => 'Villa', 'requires_address' => true],
+            ['name' => 'Local commercial', 'requires_address' => true],
+            ['name' => 'Bureau', 'requires_address' => true],
+            ['name' => 'Entrepôt', 'requires_address' => true],
+            ['name' => 'Parking', 'requires_address' => true],
+            ['name' => 'Garage', 'requires_address' => true],
+            ['name' => 'Terrain', 'requires_address' => true],
+            ['name' => 'Véhicule', 'requires_address' => false],
+            ['name' => 'Équipement', 'requires_address' => false],
+            ['name' => 'Mobilier', 'requires_address' => false],
+        ];
+
+        foreach ($types as $type) {
+            PropertyType::create($type);
+        }
+    }
+}
+```
+
+```php
+<?php
+// database/seeders/AdminSeeder.php
+
+namespace Database\Seeders;
+
+use App\Models\User;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+
+class AdminSeeder extends Seeder
+{
+    public function run(): void
+    {
+        User::create([
+            'name' => 'Administrateur',
+            'email' => 'admin@gestimmo.com',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'email_verified_at' => now(),
+        ]);
+    }
+}
+```
+
+---
+
+Ce système est maintenant complet avec toutes les fonctionnalités demandées. Les points clés
+sont les suivants : la gestion des biens avec types configurables, l'attribution des locataires
+avec upload de contrats, le système de notifications pour les avocats (interface et email), et
+la relation many-to-many entre bailleurs et avocats. Pour finaliser l'installation, il faudra
+enregistrer les policies dans le `AuthServiceProvider`,
+configurer le middleware dans le fichier approprié, et exécuter les migrations et seeders.

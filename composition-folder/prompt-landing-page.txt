@@ -1,0 +1,8 @@
+Voici la description de mon systeme que je veux creer :
+
+
+
+Je veux que tu me genere le code html/tailwindcss pour la landing page
+de ce systeme en utilisant le web design trend minimalisme audacieux combine
+avec le glassmorphisme et le motion desing. Utilise des
+circle decoratif en background et colore ces circle degrader et anime

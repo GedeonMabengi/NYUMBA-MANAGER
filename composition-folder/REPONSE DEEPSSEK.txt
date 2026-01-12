@@ -1,0 +1,1129 @@
+# Solution pour le système de gestion immobilière
+
+## 1. Parcours Utilisateur
+
+### Pour le bailleur :
+1. **Inscription/Connexion**
+   - S'inscrire avec email, mot de passe, informations personnelles
+   - Se connecter au système
+
+2. **Tableau de bord**
+   - Vue d'ensemble de tous ses biens
+   - Statistiques (biens loués/vacants, revenus, etc.)
+
+3. **Gestion des biens**
+   - Ajouter un nouveau bien (nom, type, localisation)
+   - Modifier/Supprimer un bien existant
+   - Lister tous ses biens avec statut (loué/vacant)
+
+4. **Gestion des locations**
+   - Attribuer un locataire à un bien vacant
+   - Télécharger/prendre photo du contrat de bail
+   - Consulter les détails d'une location active
+   - Résilier une location
+
+### Pour l'avocat :
+1. **Inscription/Connexion**
+   - S'inscrire avec email, mot de passe, informations professionnelles
+   - Se connecter au système
+
+2. **Tableau de bord**
+   - Vue de tous ses clients (bailleurs)
+   - Notifications des événements récents
+   - Liste des biens de ses clients
+
+3. **Suivi des événements**
+   - Consulter les notifications (email + interface)
+   - Voir les détails de chaque événement
+   - Télécharger les documents liés (contrats)
+
+### Pour l'administrateur :
+1. **Gestion des types de biens**
+   - Ajouter/Modifier/Supprimer des types de biens
+   - Gérer les catégories
+
+## 2. Organisation de la base de données
+
+```
+USERS
+- id (PK)
+- email
+- password
+- type ('landlord', 'lawyer', 'admin')
+- first_name
+- last_name
+- phone
+- created_at
+- updated_at
+
+PROPERTY_TYPES
+- id (PK)
+- name
+- category ('immobilier', 'mobilier')
+- created_at
+- updated_at
+
+PROPERTIES
+- id (PK)
+- landlord_id (FK → USERS)
+- name
+- property_type_id (FK → PROPERTY_TYPES)
+- address (nullable)
+- description
+- status ('vacant', 'occupied')
+- created_at
+- updated_at
+
+TENANTS
+- id (PK)
+- property_id (FK → PROPERTIES)
+- first_name
+- last_name
+- email
+- phone
+- identification_number
+- lease_start_date
+- lease_end_date (nullable)
+- monthly_rent
+- deposit_amount
+- status ('active', 'terminated')
+- created_at
+- updated_at
+
+LEASE_DOCUMENTS
+- id (PK)
+- tenant_id (FK → TENANTS)
+- file_path
+- file_name
+- file_type
+- upload_date
+- created_at
+- updated_at
+
+LANDLORD_LAWYERS
+- id (PK)
+- landlord_id (FK → USERS)
+- lawyer_id (FK → USERS)
+- created_at
+- updated_at
+
+NOTIFICATIONS
+- id (PK)
+- user_id (FK → USERS)
+- event_type ('property_added', 'tenant_assigned', 'lease_terminated')
+- related_entity_type ('Property', 'Tenant')
+- related_entity_id
+- message
+- is_read
+- email_sent
+- created_at
+- updated_at
+```
+
+## 3. Migrations Laravel
+
+```php
+// database/migrations/xxxx_xx_xx_create_users_table.php
+public function up()
+{
+    Schema::create('users', function (Blueprint $table) {
+        $table->id();
+        $table->string('email')->unique();
+        $table->string('password');
+        $table->enum('type', ['landlord', 'lawyer', 'admin']);
+        $table->string('first_name');
+        $table->string('last_name');
+        $table->string('phone')->nullable();
+        $table->rememberToken();
+        $table->timestamps();
+    });
+}
+
+// database/migrations/xxxx_xx_xx_create_property_types_table.php
+public function up()
+{
+    Schema::create('property_types', function (Blueprint $table) {
+        $table->id();
+        $table->string('name');
+        $table->enum('category', ['immobilier', 'mobilier']);
+        $table->timestamps();
+    });
+}
+
+// database/migrations/xxxx_xx_xx_create_properties_table.php
+public function up()
+{
+    Schema::create('properties', function (Blueprint $table) {
+        $table->id();
+        $table->foreignId('landlord_id')->constrained('users');
+        $table->string('name');
+        $table->foreignId('property_type_id')->constrained();
+        $table->string('address')->nullable();
+        $table->text('description')->nullable();
+        $table->enum('status', ['vacant', 'occupied'])->default('vacant');
+        $table->timestamps();
+    });
+}
+
+// database/migrations/xxxx_xx_xx_create_tenants_table.php
+public function up()
+{
+    Schema::create('tenants', function (Blueprint $table) {
+        $table->id();
+        $table->foreignId('property_id')->constrained()->onDelete('cascade');
+        $table->string('first_name');
+        $table->string('last_name');
+        $table->string('email')->nullable();
+        $table->string('phone');
+        $table->string('identification_number')->nullable();
+        $table->date('lease_start_date');
+        $table->date('lease_end_date')->nullable();
+        $table->decimal('monthly_rent', 10, 2);
+        $table->decimal('deposit_amount', 10, 2)->default(0);
+        $table->enum('status', ['active', 'terminated'])->default('active');
+        $table->timestamps();
+    });
+}
+
+// database/migrations/xxxx_xx_xx_create_lease_documents_table.php
+public function up()
+{
+    Schema::create('lease_documents', function (Blueprint $table) {
+        $table->id();
+        $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
+        $table->string('file_path');
+        $table->string('file_name');
+        $table->string('file_type');
+        $table->date('upload_date');
+        $table->timestamps();
+    });
+}
+
+// database/migrations/xxxx_xx_xx_create_landlord_lawyers_table.php
+public function up()
+{
+    Schema::create('landlord_lawyers', function (Blueprint $table) {
+        $table->id();
+        $table->foreignId('landlord_id')->constrained('users');
+        $table->foreignId('lawyer_id')->constrained('users');
+        $table->timestamps();
+        
+        $table->unique(['landlord_id', 'lawyer_id']);
+    });
+}
+
+// database/migrations/xxxx_xx_xx_create_notifications_table.php
+public function up()
+{
+    Schema::create('notifications', function (Blueprint $table) {
+        $table->id();
+        $table->foreignId('user_id')->constrained();
+        $table->enum('event_type', ['property_added', 'tenant_assigned', 'lease_terminated']);
+        $table->string('related_entity_type');
+        $table->unsignedBigInteger('related_entity_id');
+        $table->text('message');
+        $table->boolean('is_read')->default(false);
+        $table->boolean('email_sent')->default(false);
+        $table->timestamps();
+    });
+}
+```
+
+## 4. Structure Laravel
+
+### 4.a) Modèles
+
+```php
+// app/Models/User.php
+namespace App\Models;
+
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+
+class User extends Authenticatable
+{
+    use Notifiable;
+
+    protected $fillable = [
+        'email', 'password', 'type', 'first_name', 'last_name', 'phone'
+    ];
+
+    protected $hidden = [
+        'password', 'remember_token',
+    ];
+
+    // Relations pour bailleur
+    public function properties()
+    {
+        return $this->hasMany(Property::class, 'landlord_id');
+    }
+
+    public function lawyers()
+    {
+        return $this->belongsToMany(User::class, 'landlord_lawyers', 'landlord_id', 'lawyer_id')
+                    ->withTimestamps();
+    }
+
+    // Relations pour avocat
+    public function landlords()
+    {
+        return $this->belongsToMany(User::class, 'landlord_lawyers', 'lawyer_id', 'landlord_id')
+                    ->withTimestamps();
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class);
+    }
+
+    // Scopes
+    public function scopeLandlords($query)
+    {
+        return $query->where('type', 'landlord');
+    }
+
+    public function scopeLawyers($query)
+    {
+        return $query->where('type', 'lawyer');
+    }
+
+    public function scopeAdmins($query)
+    {
+        return $query->where('type', 'admin');
+    }
+}
+
+// app/Models/PropertyType.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class PropertyType extends Model
+{
+    protected $fillable = ['name', 'category'];
+
+    public function properties()
+    {
+        return $this->hasMany(Property::class);
+    }
+}
+
+// app/Models/Property.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Property extends Model
+{
+    protected $fillable = [
+        'landlord_id', 'name', 'property_type_id', 'address', 'description', 'status'
+    ];
+
+    protected $casts = [
+        'status' => 'string'
+    ];
+
+    public function landlord()
+    {
+        return $this->belongsTo(User::class, 'landlord_id');
+    }
+
+    public function type()
+    {
+        return $this->belongsTo(PropertyType::class, 'property_type_id');
+    }
+
+    public function tenant()
+    {
+        return $this->hasOne(Tenant::class)->where('status', 'active');
+    }
+
+    public function tenants()
+    {
+        return $this->hasMany(Tenant::class);
+    }
+}
+
+// app/Models/Tenant.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Tenant extends Model
+{
+    protected $fillable = [
+        'property_id', 'first_name', 'last_name', 'email', 'phone',
+        'identification_number', 'lease_start_date', 'lease_end_date',
+        'monthly_rent', 'deposit_amount', 'status'
+    ];
+
+    protected $casts = [
+        'lease_start_date' => 'date',
+        'lease_end_date' => 'date'
+    ];
+
+    public function property()
+    {
+        return $this->belongsTo(Property::class);
+    }
+
+    public function documents()
+    {
+        return $this->hasMany(LeaseDocument::class);
+    }
+}
+
+// app/Models/LeaseDocument.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class LeaseDocument extends Model
+{
+    protected $fillable = [
+        'tenant_id', 'file_path', 'file_name', 'file_type', 'upload_date'
+    ];
+
+    protected $casts = [
+        'upload_date' => 'date'
+    ];
+
+    public function tenant()
+    {
+        return $this->belongsTo(Tenant::class);
+    }
+}
+
+// app/Models/LandlordLawyer.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class LandlordLawyer extends Model
+{
+    protected $table = 'landlord_lawyers';
+
+    protected $fillable = ['landlord_id', 'lawyer_id'];
+
+    public function landlord()
+    {
+        return $this->belongsTo(User::class, 'landlord_id');
+    }
+
+    public function lawyer()
+    {
+        return $this->belongsTo(User::class, 'lawyer_id');
+    }
+}
+
+// app/Models/Notification.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Notification extends Model
+{
+    protected $fillable = [
+        'user_id', 'event_type', 'related_entity_type',
+        'related_entity_id', 'message', 'is_read', 'email_sent'
+    ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function relatedEntity()
+    {
+        return $this->morphTo();
+    }
+}
+```
+
+### 4.b) Contrôleurs
+
+```php
+// app/Http/Controllers/AuthController.php
+namespace App\Http\Controllers;
+
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+
+class AuthController extends Controller
+{
+    public function showLogin()
+    {
+        return view('auth.login');
+    }
+
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required'
+        ]);
+
+        if (Auth::attempt($credentials)) {
+            $request->session()->regenerate();
+            return redirect()->intended('/dashboard');
+        }
+
+        return back()->withErrors(['email' => 'Identifiants invalides']);
+    }
+
+    public function showRegister($type)
+    {
+        return view('auth.register', compact('type'));
+    }
+
+    public function register(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => 'required|in:landlord,lawyer',
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users',
+            'phone' => 'required|string|max:20',
+            'password' => 'required|min:8|confirmed'
+        ]);
+
+        $user = User::create([
+            'type' => $validated['type'],
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'email' => $validated['email'],
+            'phone' => $validated['phone'],
+            'password' => Hash::make($validated['password'])
+        ]);
+
+        Auth::login($user);
+
+        return redirect('/dashboard');
+    }
+
+    public function logout(Request $request)
+    {
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        return redirect('/');
+    }
+}
+
+// app/Http/Controllers/DashboardController.php
+namespace App\Http\Controllers;
+
+use App\Models\Property;
+use App\Models\Tenant;
+use App\Models\Notification;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class DashboardController extends Controller
+{
+    public function index()
+    {
+        $user = Auth::user();
+        
+        if ($user->type === 'landlord') {
+            $properties = Property::where('landlord_id', $user->id)->get();
+            $activeTenants = Tenant::whereHas('property', function($query) use ($user) {
+                $query->where('landlord_id', $user->id);
+            })->where('status', 'active')->count();
+            
+            return view('dashboard.landlord', compact('properties', 'activeTenants'));
+        }
+        
+        if ($user->type === 'lawyer') {
+            $landlords = $user->landlords;
+            $notifications = Notification::where('user_id', $user->id)
+                ->where('is_read', false)
+                ->orderBy('created_at', 'desc')
+                ->get();
+            
+            return view('dashboard.lawyer', compact('landlords', 'notifications'));
+        }
+        
+        if ($user->type === 'admin') {
+            $propertyTypes = PropertyType::all();
+            return view('dashboard.admin', compact('propertyTypes'));
+        }
+    }
+}
+
+// app/Http/Controllers/PropertyController.php
+namespace App\Http\Controllers;
+
+use App\Models\Property;
+use App\Models\PropertyType;
+use App\Models\Notification;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class PropertyController extends Controller
+{
+    public function index()
+    {
+        $properties = Property::where('landlord_id', Auth::id())->get();
+        return view('properties.index', compact('properties'));
+    }
+
+    public function create()
+    {
+        $propertyTypes = PropertyType::all();
+        return view('properties.create', compact('propertyTypes'));
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'property_type_id' => 'required|exists:property_types,id',
+            'address' => 'nullable|string',
+            'description' => 'nullable|string'
+        ]);
+
+        $property = Property::create([
+            'landlord_id' => Auth::id(),
+            'name' => $validated['name'],
+            'property_type_id' => $validated['property_type_id'],
+            'address' => $validated['address'],
+            'description' => $validated['description'],
+            'status' => 'vacant'
+        ]);
+
+        // Notifier les avocats
+        $this->notifyLawyers(Auth::user(), 'property_added', $property);
+
+        return redirect()->route('properties.index')
+            ->with('success', 'Bien ajouté avec succès');
+    }
+
+    private function notifyLawyers($landlord, $eventType, $entity)
+    {
+        foreach ($landlord->lawyers as $lawyer) {
+            Notification::create([
+                'user_id' => $lawyer->id,
+                'event_type' => $eventType,
+                'related_entity_type' => get_class($entity),
+                'related_entity_id' => $entity->id,
+                'message' => $this->generateMessage($eventType, $landlord, $entity),
+                'email_sent' => false
+            ]);
+            
+            // Ici vous pouvez ajouter l'envoi d'email
+        }
+    }
+
+    private function generateMessage($eventType, $landlord, $entity)
+    {
+        switch ($eventType) {
+            case 'property_added':
+                return "Le bailleur {$landlord->first_name} {$landlord->last_name} a ajouté un nouveau bien: {$entity->name}";
+            case 'tenant_assigned':
+                return "Un locataire a été attribué au bien {$entity->property->name}";
+            case 'lease_terminated':
+                return "Le bail a été résilié pour le bien {$entity->property->name}";
+        }
+    }
+}
+
+// app/Http/Controllers/TenantController.php
+namespace App\Http\Controllers;
+
+use App\Models\Tenant;
+use App\Models\Property;
+use App\Models\LeaseDocument;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+
+class TenantController extends Controller
+{
+    public function create($propertyId)
+    {
+        $property = Property::where('landlord_id', Auth::id())
+            ->findOrFail($propertyId);
+        
+        return view('tenants.create', compact('property'));
+    }
+
+    public function store(Request $request, $propertyId)
+    {
+        $property = Property::where('landlord_id', Auth::id())
+            ->findOrFail($propertyId);
+
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'email' => 'nullable|email',
+            'phone' => 'required|string|max:20',
+            'identification_number' => 'nullable|string',
+            'lease_start_date' => 'required|date',
+            'lease_end_date' => 'nullable|date|after:lease_start_date',
+            'monthly_rent' => 'required|numeric|min:0',
+            'deposit_amount' => 'nullable|numeric|min:0',
+            'lease_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:2048'
+        ]);
+
+        $tenant = Tenant::create([
+            'property_id' => $property->id,
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'email' => $validated['email'],
+            'phone' => $validated['phone'],
+            'identification_number' => $validated['identification_number'],
+            'lease_start_date' => $validated['lease_start_date'],
+            'lease_end_date' => $validated['lease_end_date'],
+            'monthly_rent' => $validated['monthly_rent'],
+            'deposit_amount' => $validated['deposit_amount'] ?? 0,
+            'status' => 'active'
+        ]);
+
+        // Mettre à jour le statut du bien
+        $property->status = 'occupied';
+        $property->save();
+
+        // Upload du document
+        if ($request->hasFile('lease_document')) {
+            $file = $request->file('lease_document');
+            $path = $file->store('lease_documents', 'public');
+            
+            LeaseDocument::create([
+                'tenant_id' => $tenant->id,
+                'file_path' => $path,
+                'file_name' => $file->getClientOriginalName(),
+                'file_type' => $file->getMimeType(),
+                'upload_date' => now()
+            ]);
+        }
+
+        // Notifier les avocats
+        $this->notifyLawyers(Auth::user(), 'tenant_assigned', $tenant);
+
+        return redirect()->route('properties.index')
+            ->with('success', 'Locataire ajouté avec succès');
+    }
+
+    public function terminate($id)
+    {
+        $tenant = Tenant::whereHas('property', function($query) {
+            $query->where('landlord_id', Auth::id());
+        })->findOrFail($id);
+
+        $tenant->status = 'terminated';
+        $tenant->save();
+
+        $property = $tenant->property;
+        $property->status = 'vacant';
+        $property->save();
+
+        // Notifier les avocats
+        $this->notifyLawyers(Auth::user(), 'lease_terminated', $tenant);
+
+        return redirect()->back()
+            ->with('success', 'Location résiliée avec succès');
+    }
+}
+
+// app/Http/Controllers/LawyerController.php
+namespace App\Http\Controllers;
+
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class LawyerController extends Controller
+{
+    public function addLandlord(Request $request)
+    {
+        $request->validate([
+            'landlord_email' => 'required|email|exists:users,email'
+        ]);
+
+        $landlord = User::where('email', $request->landlord_email)
+            ->where('type', 'landlord')
+            ->firstOrFail();
+
+        Auth::user()->landlords()->syncWithoutDetaching([$landlord->id]);
+
+        return redirect()->back()
+            ->with('success', 'Bailleur ajouté à votre liste');
+    }
+
+    public function notifications()
+    {
+        $notifications = Auth::user()->notifications()
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return view('lawyer.notifications', compact('notifications'));
+    }
+
+    public function markAsRead($id)
+    {
+        $notification = Auth::user()->notifications()->findOrFail($id);
+        $notification->is_read = true;
+        $notification->save();
+
+        return redirect()->back();
+    }
+}
+```
+
+### 4.c) Routes (routes/web.php)
+
+```php
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PropertyController;
+use App\Http\Controllers\TenantController;
+use App\Http\Controllers\LawyerController;
+
+// Routes publiques
+Route::get('/', function () {
+    return view('welcome');
+});
+
+Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+Route::post('/login', [AuthController::class, 'login']);
+Route::get('/register/{type}', [AuthController::class, 'showRegister'])->name('register');
+Route::post('/register', [AuthController::class, 'register'])->name('register.submit');
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+// Routes protégées
+Route::middleware(['auth'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    
+    // Routes pour bailleurs
+    Route::middleware(['check.type:landlord'])->group(function () {
+        Route::resource('properties', PropertyController::class);
+        
+        Route::prefix('properties/{property}/tenants')->group(function () {
+            Route::get('/create', [TenantController::class, 'create'])->name('tenants.create');
+            Route::post('/', [TenantController::class, 'store'])->name('tenants.store');
+            Route::post('/{tenant}/terminate', [TenantController::class, 'terminate'])->name('tenants.terminate');
+        });
+    });
+    
+    // Routes pour avocats
+    Route::middleware(['check.type:lawyer'])->group(function () {
+        Route::post('/lawyer/add-landlord', [LawyerController::class, 'addLandlord'])->name('lawyer.add-landlord');
+        Route::get('/notifications', [LawyerController::class, 'notifications'])->name('notifications.index');
+        Route::post('/notifications/{notification}/read', [LawyerController::class, 'markAsRead'])->name('notifications.mark-read');
+    });
+});
+```
+
+### 4.d) Vues (exemples)
+
+```blade
+<!-- resources/views/layouts/app.blade.php -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@yield('title') - Gestion Immobilière</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">Gestion Immobilière</a>
+            @auth
+            <div class="navbar-nav ms-auto">
+                <span class="nav-item nav-link">{{ Auth::user()->first_name }} {{ Auth::user()->last_name }}</span>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="btn btn-link nav-link">Déconnexion</button>
+                </form>
+            </div>
+            @endauth
+        </div>
+    </nav>
+    
+    <main class="py-4">
+        <div class="container">
+            @yield('content')
+        </div>
+    </main>
+</body>
+</html>
+
+<!-- resources/views/dashboard/landlord.blade.php -->
+@extends('layouts.app')
+
+@section('title', 'Tableau de bord')
+
+@section('content')
+<div class="row">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Biens</h5>
+                <p class="card-text display-4">{{ $properties->count() }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Locations actives</h5>
+                <p class="card-text display-4">{{ $activeTenants }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h2>Mes Biens</h2>
+        <a href="{{ route('properties.create') }}" class="btn btn-primary">Ajouter un bien</a>
+    </div>
+    
+    <div class="row mt-3">
+        @foreach($properties as $property)
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">{{ $property->name }}</h5>
+                    <p class="card-text">{{ $property->type->name }}</p>
+                    <p class="card-text">{{ $property->address }}</p>
+                    <span class="badge bg-{{ $property->status == 'occupied' ? 'success' : 'warning' }}">
+                        {{ $property->status == 'occupied' ? 'Loué' : 'Vacant' }}
+                    </span>
+                    
+                    @if($property->status == 'vacant')
+                    <a href="{{ route('tenants.create', $property) }}" class="btn btn-sm btn-success mt-2">
+                        Ajouter locataire
+                    </a>
+                    @else
+                    <p class="mt-2">
+                        <strong>Locataire:</strong> {{ $property->tenant->first_name }} {{ $property->tenant->last_name }}
+                    </p>
+                    @endif
+                </div>
+            </div>
+        </div>
+        @endforeach
+    </div>
+</div>
+@endsection
+
+<!-- resources/views/properties/create.blade.php -->
+@extends('layouts.app')
+
+@section('title', 'Ajouter un bien')
+
+@section('content')
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">Ajouter un nouveau bien</div>
+            <div class="card-body">
+                <form method="POST" action="{{ route('properties.store') }}">
+                    @csrf
+                    
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Nom du bien</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="property_type_id" class="form-label">Type de bien</label>
+                        <select class="form-select" id="property_type_id" name="property_type_id" required>
+                            <option value="">Sélectionnez un type</option>
+                            @foreach($propertyTypes as $type)
+                            <option value="{{ $type->id }}">{{ $type->name }} ({{ $type->category }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Adresse</label>
+                        <textarea class="form-control" id="address" name="address" rows="2"></textarea>
+                        <small class="text-muted">Laissez vide pour les biens mobiliers</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                    <a href="{{ route('properties.index') }}" class="btn btn-secondary">Annuler</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+<!-- resources/views/tenants/create.blade.php -->
+@extends('layouts.app')
+
+@section('title', 'Ajouter un locataire')
+
+@section('content')
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">Ajouter un locataire pour {{ $property->name }}</div>
+            <div class="card-body">
+                <form method="POST" action="{{ route('tenants.store', $property) }}" enctype="multipart/form-data">
+                    @csrf
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="first_name" class="form-label">Prénom</label>
+                            <input type="text" class="form-control" id="first_name" name="first_name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="last_name" class="form-label">Nom</label>
+                            <input type="text" class="form-control" id="last_name" name="last_name" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Téléphone</label>
+                        <input type="text" class="form-control" id="phone" name="phone" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="identification_number" class="form-label">Numéro d'identification</label>
+                        <input type="text" class="form-control" id="identification_number" name="identification_number">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="lease_start_date" class="form-label">Date début bail</label>
+                            <input type="date" class="form-control" id="lease_start_date" name="lease_start_date" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="lease_end_date" class="form-label">Date fin bail (optionnel)</label>
+                            <input type="date" class="form-control" id="lease_end_date" name="lease_end_date">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="monthly_rent" class="form-label">Loyer mensuel</label>
+                            <input type="number" step="0.01" class="form-control" id="monthly_rent" name="monthly_rent" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="deposit_amount" class="form-label">Dépôt de garantie</label>
+                            <input type="number" step="0.01" class="form-control" id="deposit_amount" name="deposit_amount">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="lease_document" class="form-label">Contrat de bail</label>
+                        <input type="file" class="form-control" id="lease_document" name="lease_document" accept=".pdf,.jpg,.jpeg,.png" required>
+                        <small class="text-muted">Format acceptés: PDF, JPG, JPEG, PNG (max 2MB)</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                    <a href="{{ route('properties.index') }}" class="btn btn-secondary">Annuler</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+## Installation et configuration supplémentaire
+
+1. **Middleware pour vérifier le type d'utilisateur :**
+
+```php
+// app/Http/Middleware/CheckUserType.php
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class CheckUserType
+{
+    public function handle(Request $request, Closure $next, ...$types)
+    {
+        if (!Auth::check() || !in_array(Auth::user()->type, $types)) {
+            abort(403, 'Accès non autorisé');
+        }
+
+        return $next($request);
+    }
+}
+```
+
+2. **Configuration des notifications par email :**
+
+```php
+// app/Notifications/PropertyEventNotification.php
+namespace App\Notifications;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Notification;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
+
+class PropertyEventNotification extends Notification implements ShouldQueue
+{
+    use Queueable;
+
+    protected $event;
+    protected $property;
+    protected $landlord;
+
+    public function __construct($event, $property, $landlord)
+    {
+        $this->event = $event;
+        $this->property = $property;
+        $this->landlord = $landlord;
+    }
+
+    public function via($notifiable)
+    {
+        return ['mail', 'database'];
+    }
+
+    public function toMail($notifiable)
+    {
+        return (new MailMessage)
+            ->subject('Notification - Événement immobilier')
+            ->line("Bonjour {$notifiable->first_name},")
+            ->line($this->getMessage())
+            ->action('Voir les détails', url('/dashboard'))
+            ->line('Merci d\'utiliser notre application!');
+    }
+
+    private function getMessage()
+    {
+        switch ($this->event) {
+            case 'property_added':
+                return "Le bailleur {$this->landlord->name} a ajouté un nouveau bien: {$this->property->name}";
+            // ... autres messages
+        }
+    }
+}
+```
+
+Ce système fournit une base solide pour votre application de gestion immobilière. Vous pouvez l'étendre avec des fonctionnalités supplémentaires comme :
+- Paiements de loyer
+- Suivi des entretiens
+- Rappels automatiques
+- Rapports financiers
+- Interface d'administration complète

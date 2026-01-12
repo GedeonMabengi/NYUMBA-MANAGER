@@ -1,0 +1,14 @@
+# Exécuter tous les seeders
+php artisan db:seed
+
+# Exécuter un seeder spécifique
+php artisan db:seed --class=UserSeeder
+
+# Regénérer toute la base avec les seeders
+php artisan migrate:fresh --seed
+
+# Pour Laravel Sail (Docker)
+sail artisan migrate:fresh --seed
+
+# Exécuter en mode production (sans confirmation)
+php artisan db:seed --force

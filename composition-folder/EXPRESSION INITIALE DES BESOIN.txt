@@ -1,0 +1,31 @@
+Voici mon idee :
+Je desire creer un systeme qui permet de gerer les biens immobiliers et mobiliers.
+Je veux les fonctionnalites suivantes :
+- Il y a 2 utilisateurs :
+*Pour le bailleurs:
+ - Possiblite d'ajouter des biens et les enregistrer dans le systeme
+ - un bien a un nom
+ - un bien a un type (le type est fournie par le systeme ex : maison, parking, appartement,...
+	il faut qu'il y a la possibilite d'ajouter les types des biens par le gestionnare de l'appli
+ - un bien a une localisation du (exemple des valeurs possible : pour mobile pas de localisation, pour les biens immobiliers une
+   une adresse doit etre donnee,...
+ - Pour les biens mis en location, il faut la possibilite d'attribuer un locateur. Dans le processus d'attribution du locataire a
+   un bien. Il faut enregistrer son nom son numero (et autre choses utile,...) et aussi le plus important possibilite d'uploader
+   le documemt qui est le contrat de bail ou de capturer une photo et d'enregistrer dans le systeme.
+
+*Pour l'avocat du bailleur :
+ - Dans le systeme il y aura toujours trois evenements majeurs : 1)l'ajout d'un bien qui est mise en location, 2)l'attribution d'un locateur
+   a un bien deja enregistrer, 3)l'annulation de l'attribution d'un locateur a bien,...
+	Le systeme doit toujours etre capable de lui envoyer les notifications (par e-mails egalement, ormis depuis l'interface)
+concernants ces evenements relatifs a son clients bailleurs.
+
+Donc on considere que dans le systeme, on peut avoir pluieurs bailleurs et chacun peut avoir soit des avocats differents ou les memes selon leurs choix.
+
+1)je souhaite que tu m'aide en me donnant le parcours utilisateur pour cet appli.
+2)en fonction de ce parcours user, donne moi l'organisation de la base des donnees en precisant les relations entre les tables
+3)Donne moi les migrations de cette base des donnees en laravel.
+4)Selon le parcours user et la bases des donner que tu as concue,
+  4.a) Donne moi les controlleurs,
+  4.b) les routes, 
+  4.c) les vues et 
+  4.d) les models laravel pour ce systeme

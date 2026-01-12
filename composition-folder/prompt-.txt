@@ -1,0 +1,366 @@
+Voici la base des donnes de mon systeme :
+
+<?php
+// database/migrations/2024_01_01_000001_create_users_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->string('phone')->nullable();
+            $table->enum('role', ['admin', 'bailleur', 'avocat'])->default('bailleur');
+            $table->boolean('is_active')->default(true);
+            $table->rememberToken();
+            $table->timestamps();
+        });
+
+        Schema::create('password_reset_tokens', function (Blueprint $table) {
+            $table->string('email')->primary();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
+    }
+};
+
+
+
+
+<?php
+// database/migrations/2024_01_01_000002_create_property_types_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('property_types', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->text('description')->nullable();
+            $table->boolean('requires_address')->default(true);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('property_types');
+    }
+};
+
+
+
+<?php
+// database/migrations/2024_01_01_000003_create_properties_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('properties', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->foreignId('property_type_id')->constrained()->onDelete('restrict');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade'); // bailleur
+            $table->string('address')->nullable();
+            $table->string('city')->nullable();
+            $table->string('postal_code')->nullable();
+            $table->string('country')->nullable()->default('France');
+            $table->boolean('is_for_rent')->default(false);
+            $table->enum('status', ['available', 'rented', 'unavailable'])->default('available');
+            $table->decimal('surface', 10, 2)->nullable();
+            $table->integer('rooms')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('properties');
+    }
+};
+
+
+
+
+<?php
+// database/migrations/2024_01_01_000004_create_bailleur_avocat_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('bailleur_avocat', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('bailleur_id')->constrained('users')->onDelete('cascade');
+            $table->foreignId('avocat_id')->constrained('users')->onDelete('cascade');
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+
+            $table->unique(['bailleur_id', 'avocat_id']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('bailleur_avocat');
+    }
+};
+
+
+
+
+<?php
+// database/migrations/2024_01_01_000005_create_tenants_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('tenants', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade'); // créé par (bailleur)
+            $table->string('first_name');
+            $table->string('last_name');
+            $table->string('email')->nullable();
+            $table->string('phone');
+            $table->string('address')->nullable();
+            $table->string('city')->nullable();
+            $table->string('postal_code')->nullable();
+            $table->string('id_card_number')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('tenants');
+    }
+};
+
+
+
+
+<?php
+// database/migrations/2024_01_01_000006_create_rentals_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('rentals', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('property_id')->constrained()->onDelete('cascade');
+            $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
+            $table->date('start_date');
+            $table->date('end_date')->nullable();
+            $table->decimal('rent_amount', 10, 2);
+            $table->decimal('deposit_amount', 10, 2)->nullable();
+            $table->enum('payment_frequency', ['monthly', 'quarterly', 'yearly'])->default('monthly');
+            $table->enum('status', ['active', 'ended', 'cancelled'])->default('active');
+            $table->text('notes')->nullable();
+            $table->date('cancelled_at')->nullable();
+            $table->string('cancellation_reason')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('rentals');
+    }
+};
+
+
+
+
+<?php
+// database/migrations/2024_01_01_000007_create_documents_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('documents', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('rental_id')->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->string('original_name');
+            $table->string('file_path');
+            $table->string('file_type');
+            $table->bigInteger('file_size');
+            $table->enum('document_type', ['lease_contract', 'amendment', 'inventory', 'other'])->default('lease_contract');
+            $table->foreignId('uploaded_by')->constrained('users')->onDelete('cascade');
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('documents');
+    }
+};
+
+
+
+
+
+<?php
+// database/migrations/2024_01_01_000008_create_notifications_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('notifications', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('type');
+            $table->morphs('notifiable');
+            $table->text('data');
+            $table->timestamp('read_at')->nullable();
+            $table->timestamp('emailed_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('notifications');
+    }
+};
+
+
+
+
+
+
+
+
+<?php
+// database/migrations/2024_01_01_000009_create_activity_logs_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('activity_logs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
+            $table->string('action'); // created, updated, deleted, rental_started, rental_ended
+            $table->string('model_type');
+            $table->unsignedBigInteger('model_id');
+            $table->json('old_values')->nullable();
+            $table->json('new_values')->nullable();
+            $table->string('ip_address')->nullable();
+            $table->timestamps();
+
+            $table->index(['model_type', 'model_id']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('activity_logs');
+    }
+};
+
+
+
+Je deja creer un systeme qui fonctionne tres bien et qui a les fonctionnalités suivantes :
+- Il y a 2 utilisateurs :
+*Pour le bailleurs:
+ - Possiblite d'ajouter des biens et les enregistrer dans le systeme
+ - un bien a un nom
+ - un bien a un type (le type est fournie par le systeme ex : maison, parking, appartement,...
+	il faut qu'il y a la possibilite d'ajouter les types des biens par le gestionnare de l'appli
+ - un bien a une localisation du (exemple des valeurs possible : pour mobile pas de localisation, pour les biens immobiliers une
+   une adresse doit etre donnee,...
+ - Pour les biens mis en location, il faut la possibilite d'attribuer un locateur. Dans le processus d'attribution du locataire a
+   un bien. Il faut enregistrer son nom son numero (et autre choses utile,...) et aussi le plus important possibilite d'uploader
+   le documemt qui est le contrat de bail ou de capturer une photo et d'enregistrer dans le systeme.
+
+*Pour l'avocat du bailleur :
+ - Dans le systeme il y aura toujours trois evenements majeurs : 1)l'ajout d'un bien qui est mise en location, 2)l'attribution d'un locateur
+   a un bien deja enregistrer, 3)l'annulation de l'attribution d'un locateur a bien,...
+	Le systeme doit toujours etre capable de lui envoyer les notifications (par e-mails egalement, ormis depuis l'interface)
+concernants ces evenements relatifs a son clients bailleurs.
+
+Donc on considere que dans le systeme, on peut avoir pluieurs bailleurs et chacun peut avoir soit des avocats differents ou les memes selon leurs choix.
+
+J'ai deja toutes les routes, controllers, model et vues. tout fonctionne bien ! Je veux ajouter une fonctionnalites simple
+Permettre au bayeurs d'enregister une facture de payement qui contient les elements suivants :
+
+Le nom du bayeurs (il s'agit ici du bailleur qui est connecter)
+Le nom du locataire (disponibles depuis le systeme)
+Le nom de celui qui paye (a enregister depuis le systeme)
+Le montant payer
+La date
+Le bien pour le quel il paye (il s'agit du bien du bailleur disponibles depuis le système)
+
+Je veux que tu analyse la bases des donnees actuel, pour tu me cree au besoin des tables
+pour assurer cette fonctionnalites correctement Tu dois me donner les codes complets des
+controllers, vues, model et routes liee a cette fonctionnalites

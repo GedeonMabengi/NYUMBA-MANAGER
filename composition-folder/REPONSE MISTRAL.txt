@@ -1,0 +1,237 @@
+Voici une réponse structurée pour votre projet de gestion immobilière et mobilière, en suivant vos demandes point par point.
+
+---
+
+## 1. Parcours Utilisateur
+
+### **Bailleur**
+- **Inscription/Connexion** : Le bailleur s’inscrit ou se connecte au système.
+- **Gestion des Biens**
+  - **Ajouter un bien** : Saisie du nom, sélection du type (ou ajout d’un nouveau type si gestionnaire), localisation (adresse ou "mobile").
+  - **Modifier/Supprimer un bien** : Accès à la liste des biens, modification ou suppression.
+  - **Mettre en location** : Sélection d’un bien, ajout des informations du locataire (nom, numéro, etc.), upload du contrat de bail (PDF ou photo).
+- **Gestion des Locataires**
+  - **Attribution** : Sélection d’un bien, ajout des informations du locataire, upload du contrat.
+  - **Annulation** : Sélection d’un bien, annulation de l’attribution du locataire.
+
+### **Avocat**
+- **Inscription/Connexion** : L’avocat s’inscrit ou se connecte au système.
+- **Notifications**
+  - Reçoit des notifications pour :
+    - Ajout d’un bien mis en location.
+    - Attribution d’un locataire à un bien.
+    - Annulation d’une attribution.
+- **Consultation des Événements** : Accès à une liste des événements liés à ses clients bailleurs.
+
+---
+
+## 2. Organisation de la Base de Données
+
+### **Tables et Relations**
+
+
+Tables de la Base de Données
+
+
+| Table                | Description                                                                                     | Relations                                                                                     |
+|----------------------|-------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| `users`              | Utilisateurs (bailleurs, avocats, gestionnaires).                                              |                                                                                               |
+| `property_types`     | Types de biens (maison, appartement, parking, etc.).                                           |                                                                                               |
+| `properties`         | Biens immobiliers/mobiliers.                                                                   | `user_id` → `users.id`, `property_type_id` → `property_types.id`                              |
+| `tenants`            | Locataires.                                                                                     |                                                                                               |
+| `leases`             | Contrats de location.                                                                          | `property_id` → `properties.id`, `tenant_id` → `tenants.id`                                   |
+| `lease_documents`    | Documents de contrat (PDF/photos).                                                             | `lease_id` → `leases.id`                                                                      |
+| `lawyers`            | Avocats.                                                                                       | `user_id` → `users.id`                                                                         |
+| `bailiff_lawyer`     | Relation entre bailleurs et avocats.                                                          | `bailiff_id` → `users.id`, `lawyer_id` → `lawyers.id`                                         |
+| `notifications`      | Notifications envoyées aux avocats.                                                            | `lawyer_id` → `lawyers.id`, `event_type` (ajout/attribution/annulation), `related_id` (bien/locataire) |
+
+---
+
+## 3. Migrations Laravel
+
+Voici les migrations pour chaque table :
+
+```php
+// users
+Schema::create('users', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->string('email')->unique();
+    $table->string('password');
+    $table->string('role'); // bailleur, avocat, gestionnaire
+    $table->timestamps();
+});
+
+// property_types
+Schema::create('property_types', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->timestamps();
+});
+
+// properties
+Schema::create('properties', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->text('location')->nullable();
+    $table->foreignId('user_id')->constrained('users');
+    $table->foreignId('property_type_id')->constrained('property_types');
+    $table->timestamps();
+});
+
+// tenants
+Schema::create('tenants', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->string('phone');
+    $table->timestamps();
+});
+
+// leases
+Schema::create('leases', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('property_id')->constrained('properties');
+    $table->foreignId('tenant_id')->constrained('tenants');
+    $table->date('start_date');
+    $table->date('end_date');
+    $table->timestamps();
+});
+
+// lease_documents
+Schema::create('lease_documents', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('lease_id')->constrained('leases');
+    $table->string('document_path');
+    $table->timestamps();
+});
+
+// lawyers
+Schema::create('lawyers', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('user_id')->constrained('users');
+    $table->timestamps();
+});
+
+// bailiff_lawyer
+Schema::create('bailiff_lawyer', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('bailiff_id')->constrained('users');
+    $table->foreignId('lawyer_id')->constrained('lawyers');
+    $table->timestamps();
+});
+
+// notifications
+Schema::create('notifications', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('lawyer_id')->constrained('lawyers');
+    $table->string('event_type'); // ajout, attribution, annulation
+    $table->unsignedBigInteger('related_id'); // ID du bien/locataire concerné
+    $table->timestamps();
+});
+```
+
+---
+
+## 4. Implémentation Laravel
+
+### 4.a. Contrôleurs
+
+```php
+// PropertyController.php
+class PropertyController extends Controller
+{
+    public function index() { /* Liste des biens */ }
+    public function create() { /* Formulaire d'ajout */ }
+    public function store(Request $request) { /* Enregistrement */ }
+    public function edit($id) { /* Formulaire de modification */ }
+    public function update(Request $request, $id) { /* Mise à jour */ }
+    public function destroy($id) { /* Suppression */ }
+}
+
+// TenantController.php
+class TenantController extends Controller
+{
+    public function index() { /* Liste des locataires */ }
+    public function create() { /* Formulaire d'ajout */ }
+    public function store(Request $request) { /* Enregistrement */ }
+    public function assignToProperty(Request $request) { /* Attribution à un bien */ }
+    public function unassignFromProperty($id) { /* Annulation d'attribution */ }
+}
+
+// LeaseController.php
+class LeaseController extends Controller
+{
+    public function uploadDocument(Request $request) { /* Upload de contrat */ }
+}
+
+// NotificationController.php
+class NotificationController extends Controller
+{
+    public function sendNotification($lawyerId, $eventType, $relatedId) { /* Envoi de notification */ }
+}
+```
+
+---
+
+### 4.b. Routes
+
+```php
+// routes/web.php
+Route::middleware('auth')->group(function () {
+    Route::resource('properties', PropertyController::class);
+    Route::resource('tenants', TenantController::class);
+    Route::post('tenants/assign', [TenantController::class, 'assignToProperty']);
+    Route::post('leases/upload', [LeaseController::class, 'uploadDocument']);
+    Route::post('notifications/send', [NotificationController::class, 'sendNotification']);
+});
+```
+
+---
+
+### 4.c. Vues
+
+- **Bailleur** :
+  - `properties/index.blade.php` : Liste des biens.
+  - `properties/create.blade.php` : Formulaire d’ajout.
+  - `tenants/assign.blade.php` : Formulaire d’attribution.
+- **Avocat** :
+  - `notifications/index.blade.php` : Liste des notifications.
+
+---
+
+### 4.d. Modèles
+
+```php
+// Property.php
+class Property extends Model
+{
+    public function user() { return $this->belongsTo(User::class); }
+    public function type() { return $this->belongsTo(PropertyType::class, 'property_type_id'); }
+    public function leases() { return $this->hasMany(Lease::class); }
+}
+
+// Tenant.php
+class Tenant extends Model
+{
+    public function leases() { return $this->hasMany(Lease::class); }
+}
+
+// Lease.php
+class Lease extends Model
+{
+    public function property() { return $this->belongsTo(Property::class); }
+    public function tenant() { return $this->belongsTo(Tenant::class); }
+    public function documents() { return $this->hasMany(LeaseDocument::class); }
+}
+
+// Lawyer.php
+class Lawyer extends Model
+{
+    public function user() { return $this->belongsTo(User::class); }
+    public function bailiffs() { return $this->belongsToMany(User::class, 'bailiff_lawyer', 'lawyer_id', 'bailiff_id'); }
+    public function notifications() { return $this->hasMany(Notification::class); }
+}
+```
+
+---
+**Prochaine étape** : Voulez-vous que je détaille une partie spécifique (ex : code des contrôleurs, vues, ou logique métier) ? Ou préférez-vous commencer par l’implémentation d’une fonctionnalité en particulier ?

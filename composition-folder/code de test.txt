@@ -1,0 +1,110 @@
+Excellent ! Oui, absolument. Voici les identifiants de test que j'ai inclus dans les seeders :
+
+## 🔐 **Identifiants de connexion pour les utilisateurs test**
+
+### **1. Administrateur**
+- **Email:** `admin@systeme-location.fr`
+- **Mot de passe:** `password123`
+- **Rôle:** Admin
+- **Accès:** Toutes les fonctionnalités du système
+
+### **2. Bailleurs (propriétaires)**
+**Bailleur 1 - Pierre Martin**
+- **Email:** `pierre.martin@example.com`
+- **Mot de passe:** `password123`
+- **Rôle:** Bailleur
+- **Propriétés:** Appartement T3 Paris 15ème, Studio étudiant Lyon
+
+**Bailleur 2 - Sophie Dubois**
+- **Email:** `sophie.dubois@example.com`
+- **Mot de passe:** `password123`
+- **Rôle:** Bailleur
+- **Propriétés:** Maison à Versailles, Local commercial Lille
+
+**Bailleur 3 - Jean Dupont**
+- **Email:** `jean.dupont@example.com`
+- **Mot de passe:** `password123`
+- **Rôle:** Bailleur
+- **Propriétés:** Parking Paris 16ème, Appartement T2 Bordeaux
+
+### **3. Avocats**
+**Avocat 1 - Maître Bernard**
+- **Email:** `maitre.bernard@avocat.fr`
+- **Mot de passe:** `password123`
+- **Rôle:** Avocat
+- **Clients:** Pierre Martin, Sophie Dubois, Jean Dupont
+
+**Avocat 2 - Maître Laurent**
+- **Email:** `maitre.laurent@avocat.fr`
+- **Mot de passe:** `password123`
+- **Rôle:** Avocat
+- **Clients:** Pierre Martin, Jean Dupont
+
+## 📱 **Données de test supplémentaires**
+
+### **Locations actives pour tester :**
+1. **Thomas Leroy** locataire de l'**Appartement T3 Paris 15ème**
+   - Loyer: 1250€/mois
+   - Contrat actif jusqu'au 31/12/2025
+
+2. **Antoine Petit** locataire de la **Maison Versailles**
+   - Loyer: 1800€/mois
+   - Contrat actif jusqu'au 31/05/2024
+
+3. **Marie Moreau** locataire du **Studio étudiant Lyon**
+   - Loyer: 550€/mois
+   - Contrat étudiant jusqu'au 31/07/2024
+
+### **Documents disponibles :**
+- Contrats de bail pour chaque location
+- États des lieux
+- Avenants
+- Garanties parentales
+
+## 🔍 **Scénarios de test intéressants :**
+
+### **Pour tester le rôle Bailleur :**
+1. Connectez-vous avec `pierre.martin@example.com`
+2. Vous verrez 2 propriétés dont une en location
+3. Un locataire (Thomas Leroy) avec un contrat actif
+4. Des documents associés à la location
+
+### **Pour tester le rôle Avocat :**
+1. Connectez-vous avec `maitre.bernard@avocat.fr`
+2. Vous aurez accès aux dossiers de 3 bailleurs
+3. Vous pourrez voir les contrats et documents
+
+### **Pour tester le rôle Admin :**
+1. Connectez-vous avec `admin@systeme-location.fr`
+2. Accès complet à tous les utilisateurs
+3. Voir toutes les propriétés et locations
+4. Gérer les rôles et permissions
+
+## 💡 **Conseils pour le développement :**
+
+1. **Pour les tests d'authentification :** Tous les utilisateurs ont le même mot de passe (`password123`) pour faciliter les tests.
+
+2. **Données réalistes :** Les adresses, téléphones et informations sont réalistes pour simuler un environnement de production.
+
+3. **Relations complètes :** Toutes les relations entre tables sont établies (clés étrangères respectées).
+
+4. **Statuts variés :** J'ai inclus des propriétés avec différents statuts (available, rented, unavailable) et des locations avec différents statuts (active, ended, cancelled).
+
+## 🚨 **Important pour la sécurité en production :**
+
+⚠️ **N'utilisez JAMAIS ces identifiants en production !**  
+Ces mots de passe sont très faibles et destinés uniquement aux environnements de test/développement.
+
+En production, vous devrez :
+1. Changer tous les mots de passe
+2. Supprimer les utilisateurs de test
+3. Utiliser des mots de passe forts
+4. Activer la vérification d'email
+5. Implémenter des politiques de sécurité
+
+---
+
+**Besoins supplémentaires ?**  
+- Vous voulez que j'ajoute plus d'utilisateurs test ?
+- Vous avez besoin de données spécifiques pour tester certaines fonctionnalités ?
+- Vous voulez que je crée un script de démo avec des scénarios d'utilisation ?

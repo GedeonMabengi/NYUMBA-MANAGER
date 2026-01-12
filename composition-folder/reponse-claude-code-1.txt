@@ -1,0 +1,3362 @@
+# Système de Gestion des Biens Immobiliers et Mobiliers
+
+## 1. Parcours Utilisateur
+
+### Parcours du Bailleur
+
+**Authentification et accès**
+Le bailleur accède à l'application via une page de connexion. Après authentification, il est redirigé vers son tableau de bord personnel qui affiche un résumé de ses biens, le nombre de biens loués, les biens vacants et les notifications récentes.
+
+**Gestion des biens**
+Depuis le tableau de bord, le bailleur peut accéder à la liste complète de ses biens. Cette liste présente chaque bien avec son nom, son type, sa localisation et son statut (vacant ou loué). Le bailleur peut filtrer cette liste par type de bien ou par statut de location.
+
+Pour ajouter un nouveau bien, le bailleur clique sur un bouton d'ajout qui ouvre un formulaire. Il renseigne le nom du bien, sélectionne le type parmi une liste prédéfinie (maison, appartement, parking, véhicule, etc.), et indique la localisation. Si le bien est immobilier, une adresse complète est requise. Si le bien est mobilier, la localisation peut rester vide ou contenir une description simple. Le bailleur indique également si le bien est destiné à la location.
+
+**Attribution d'un locataire**
+Lorsqu'un bien est disponible à la location, le bailleur peut lui attribuer un locataire. Il accède à la fiche du bien et clique sur "Attribuer un locataire". Un formulaire apparaît demandant les informations du locataire : nom complet, numéro de téléphone, adresse email, numéro de pièce d'identité. Le bailleur peut ensuite uploader le contrat de bail au format PDF ou image, ou utiliser la caméra de son appareil pour capturer une photo du document. La date de début et la date de fin du bail sont également enregistrées.
+
+**Résiliation d'une location**
+Pour mettre fin à une location, le bailleur accède à la fiche du bien loué et clique sur "Résilier le bail". Une confirmation est demandée, et la date de résiliation est enregistrée. Le bien redevient alors disponible à la location.
+
+### Parcours de l'Avocat
+
+**Authentification et accès**
+L'avocat se connecte avec ses identifiants spécifiques. Son tableau de bord est orienté vers le suivi des événements juridiques.
+
+**Consultation du journal des événements**
+L'avocat accède à un journal chronologique listant tous les événements majeurs : ajout de biens mis en location, attribution de locataires, et résiliations de baux. Chaque événement affiche la date, le type d'événement, le bien concerné et les parties impliquées.
+
+**Consultation des détails**
+L'avocat peut cliquer sur un événement pour voir les détails complets, notamment consulter ou télécharger les contrats de bail associés aux attributions de locataires.
+
+### Parcours de l'Administrateur (Gestionnaire de l'application)
+
+**Gestion des types de biens**
+L'administrateur peut accéder à une section de paramétrage où il gère la liste des types de biens disponibles dans le système. Il peut ajouter de nouveaux types, modifier les existants ou les désactiver.
+
+---
+
+## 2. Architecture de la Base de Données
+
+### Schéma conceptuel
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│    users    │     │    biens    │     │  locataires │
+├─────────────┤     ├─────────────┤     ├─────────────┤
+│ id          │     │ id          │     │ id          │
+│ name        │     │ nom         │     │ nom_complet │
+│ email       │     │ type_bien_id│────▶│ telephone   │
+│ password    │     │ user_id     │────▶│ email       │
+│ role        │     │ localisation│     │ piece_identite│
+└─────────────┘     │ est_louable │     └─────────────┘
+       │            │ statut      │            │
+       │            └─────────────┘            │
+       │                   │                   │
+       ▼                   ▼                   ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│ types_biens │     │  locations  │     │ documents   │
+├─────────────┤     ├─────────────┤     ├─────────────┤
+│ id          │     │ id          │     │ id          │
+│ nom         │     │ bien_id     │────▶│ location_id │
+│ categorie   │     │ locataire_id│────▶│ type        │
+│ actif       │     │ date_debut  │     │ chemin      │
+└─────────────┘     │ date_fin    │     │ nom_original│
+                    │ statut      │     └─────────────┘
+                    └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │ evenements  │
+                    ├─────────────┤
+                    │ id          │
+                    │ type        │
+                    │ bien_id     │
+                    │ location_id │
+                    │ user_id     │
+                    │ description │
+                    │ created_at  │
+                    └─────────────┘
+```
+
+---
+
+## 3. Migrations Laravel
+
+### Migration pour la table des rôles et utilisateurs
+
+```php
+<?php
+// database/migrations/2024_01_01_000001_create_users_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->enum('role', ['admin', 'bailleur', 'avocat'])->default('bailleur');
+            $table->string('telephone')->nullable();
+            $table->text('adresse')->nullable();
+            $table->boolean('actif')->default(true);
+            $table->rememberToken();
+            $table->timestamps();
+        });
+
+        Schema::create('password_reset_tokens', function (Blueprint $table) {
+            $table->string('email')->primary();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
+    }
+};
+```
+
+### Migration pour les types de biens
+
+```php
+<?php
+// database/migrations/2024_01_01_000002_create_types_biens_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('types_biens', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom');
+            $table->enum('categorie', ['immobilier', 'mobilier'])->default('immobilier');
+            $table->text('description')->nullable();
+            $table->boolean('necessite_adresse')->default(true);
+            $table->boolean('actif')->default(true);
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('types_biens');
+    }
+};
+```
+
+### Migration pour les biens
+
+```php
+<?php
+// database/migrations/2024_01_01_000003_create_biens_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('biens', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->foreignId('type_bien_id')->constrained('types_biens')->onDelete('restrict');
+            $table->string('nom');
+            $table->text('description')->nullable();
+            $table->string('adresse')->nullable();
+            $table->string('ville')->nullable();
+            $table->string('code_postal')->nullable();
+            $table->string('pays')->default('France');
+            $table->text('localisation_description')->nullable();
+            $table->decimal('superficie', 10, 2)->nullable();
+            $table->decimal('loyer_mensuel', 10, 2)->nullable();
+            $table->boolean('est_louable')->default(false);
+            $table->enum('statut', ['vacant', 'loue', 'indisponible'])->default('vacant');
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('biens');
+    }
+};
+```
+
+### Migration pour les locataires
+
+```php
+<?php
+// database/migrations/2024_01_01_000004_create_locataires_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('locataires', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom_complet');
+            $table->string('email')->nullable();
+            $table->string('telephone');
+            $table->string('telephone_secondaire')->nullable();
+            $table->string('piece_identite_type')->nullable();
+            $table->string('piece_identite_numero')->nullable();
+            $table->text('adresse_actuelle')->nullable();
+            $table->string('profession')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('locataires');
+    }
+};
+```
+
+### Migration pour les locations
+
+```php
+<?php
+// database/migrations/2024_01_01_000005_create_locations_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('locations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('bien_id')->constrained('biens')->onDelete('cascade');
+            $table->foreignId('locataire_id')->constrained('locataires')->onDelete('cascade');
+            $table->date('date_debut');
+            $table->date('date_fin')->nullable();
+            $table->decimal('loyer_mensuel', 10, 2);
+            $table->decimal('depot_garantie', 10, 2)->nullable();
+            $table->enum('statut', ['actif', 'termine', 'resilie'])->default('actif');
+            $table->date('date_resiliation')->nullable();
+            $table->text('motif_resiliation')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('locations');
+    }
+};
+```
+
+### Migration pour les documents
+
+```php
+<?php
+// database/migrations/2024_01_01_000006_create_documents_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('documents', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('location_id')->constrained('locations')->onDelete('cascade');
+            $table->enum('type', ['contrat_bail', 'avenant', 'etat_lieux_entree', 'etat_lieux_sortie', 'autre']);
+            $table->string('nom_original');
+            $table->string('chemin_fichier');
+            $table->string('mime_type')->nullable();
+            $table->unsignedBigInteger('taille')->nullable();
+            $table->text('description')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('documents');
+    }
+};
+```
+
+### Migration pour les événements
+
+```php
+<?php
+// database/migrations/2024_01_01_000007_create_evenements_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('evenements', function (Blueprint $table) {
+            $table->id();
+            $table->enum('type', ['ajout_bien_location', 'attribution_locataire', 'resiliation_location']);
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->foreignId('bien_id')->nullable()->constrained('biens')->onDelete('set null');
+            $table->foreignId('location_id')->nullable()->constrained('locations')->onDelete('set null');
+            $table->foreignId('locataire_id')->nullable()->constrained('locataires')->onDelete('set null');
+            $table->text('description');
+            $table->json('donnees_supplementaires')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('evenements');
+    }
+};
+```
+
+### Seeder pour les types de biens par défaut
+
+```php
+<?php
+// database/seeders/TypesBiensSeeder.php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use App\Models\TypeBien;
+
+class TypesBiensSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $types = [
+            ['nom' => 'Maison', 'categorie' => 'immobilier', 'necessite_adresse' => true],
+            ['nom' => 'Appartement', 'categorie' => 'immobilier', 'necessite_adresse' => true],
+            ['nom' => 'Studio', 'categorie' => 'immobilier', 'necessite_adresse' => true],
+            ['nom' => 'Parking', 'categorie' => 'immobilier', 'necessite_adresse' => true],
+            ['nom' => 'Garage', 'categorie' => 'immobilier', 'necessite_adresse' => true],
+            ['nom' => 'Local commercial', 'categorie' => 'immobilier', 'necessite_adresse' => true],
+            ['nom' => 'Terrain', 'categorie' => 'immobilier', 'necessite_adresse' => true],
+            ['nom' => 'Véhicule', 'categorie' => 'mobilier', 'necessite_adresse' => false],
+            ['nom' => 'Équipement', 'categorie' => 'mobilier', 'necessite_adresse' => false],
+            ['nom' => 'Mobilier', 'categorie' => 'mobilier', 'necessite_adresse' => false],
+        ];
+
+        foreach ($types as $type) {
+            TypeBien::create($type);
+        }
+    }
+}
+```
+
+### Seeder principal
+
+```php
+<?php
+// database/seeders/DatabaseSeeder.php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Créer l'administrateur
+        User::create([
+            'name' => 'Administrateur',
+            'email' => 'admin@gestion-biens.com',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+        ]);
+
+        // Créer un bailleur de test
+        User::create([
+            'name' => 'Jean Dupont',
+            'email' => 'bailleur@test.com',
+            'password' => Hash::make('password'),
+            'role' => 'bailleur',
+        ]);
+
+        // Créer un avocat de test
+        User::create([
+            'name' => 'Maître Martin',
+            'email' => 'avocat@test.com',
+            'password' => Hash::make('password'),
+            'role' => 'avocat',
+        ]);
+
+        $this->call([
+            TypesBiensSeeder::class,
+        ]);
+    }
+}
+```
+
+---
+
+## 4. Modèles Laravel
+
+### Modèle User
+
+```php
+<?php
+// app/Models/User.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class User extends Authenticatable
+{
+    use HasFactory, Notifiable;
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'role',
+        'telephone',
+        'adresse',
+        'actif',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'actif' => 'boolean',
+        ];
+    }
+
+    public function biens(): HasMany
+    {
+        return $this->hasMany(Bien::class);
+    }
+
+    public function evenements(): HasMany
+    {
+        return $this->hasMany(Evenement::class);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isBailleur(): bool
+    {
+        return $this->role === 'bailleur';
+    }
+
+    public function isAvocat(): bool
+    {
+        return $this->role === 'avocat';
+    }
+}
+```
+
+### Modèle TypeBien
+
+```php
+<?php
+// app/Models/TypeBien.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class TypeBien extends Model
+{
+    use HasFactory;
+
+    protected $table = 'types_biens';
+
+    protected $fillable = [
+        'nom',
+        'categorie',
+        'description',
+        'necessite_adresse',
+        'actif',
+    ];
+
+    protected $casts = [
+        'necessite_adresse' => 'boolean',
+        'actif' => 'boolean',
+    ];
+
+    public function biens(): HasMany
+    {
+        return $this->hasMany(Bien::class, 'type_bien_id');
+    }
+
+    public function scopeActifs($query)
+    {
+        return $query->where('actif', true);
+    }
+
+    public function scopeImmobiliers($query)
+    {
+        return $query->where('categorie', 'immobilier');
+    }
+
+    public function scopeMobiliers($query)
+    {
+        return $query->where('categorie', 'mobilier');
+    }
+}
+```
+
+### Modèle Bien
+
+```php
+<?php
+// app/Models/Bien.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+
+class Bien extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $table = 'biens';
+
+    protected $fillable = [
+        'user_id',
+        'type_bien_id',
+        'nom',
+        'description',
+        'adresse',
+        'ville',
+        'code_postal',
+        'pays',
+        'localisation_description',
+        'superficie',
+        'loyer_mensuel',
+        'est_louable',
+        'statut',
+    ];
+
+    protected $casts = [
+        'est_louable' => 'boolean',
+        'superficie' => 'decimal:2',
+        'loyer_mensuel' => 'decimal:2',
+    ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function typeBien(): BelongsTo
+    {
+        return $this->belongsTo(TypeBien::class, 'type_bien_id');
+    }
+
+    public function locations(): HasMany
+    {
+        return $this->hasMany(Location::class);
+    }
+
+    public function locationActive(): HasOne
+    {
+        return $this->hasOne(Location::class)->where('statut', 'actif');
+    }
+
+    public function evenements(): HasMany
+    {
+        return $this->hasMany(Evenement::class);
+    }
+
+    public function getAdresseCompleteAttribute(): string
+    {
+        $parts = array_filter([
+            $this->adresse,
+            $this->code_postal,
+            $this->ville,
+            $this->pays,
+        ]);
+
+        return implode(', ', $parts) ?: $this->localisation_description ?? 'Non spécifiée';
+    }
+
+    public function scopeLoues($query)
+    {
+        return $query->where('statut', 'loue');
+    }
+
+    public function scopeVacants($query)
+    {
+        return $query->where('statut', 'vacant');
+    }
+
+    public function scopeLouables($query)
+    {
+        return $query->where('est_louable', true);
+    }
+}
+```
+
+### Modèle Locataire
+
+```php
+<?php
+// app/Models/Locataire.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Locataire extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $table = 'locataires';
+
+    protected $fillable = [
+        'nom_complet',
+        'email',
+        'telephone',
+        'telephone_secondaire',
+        'piece_identite_type',
+        'piece_identite_numero',
+        'adresse_actuelle',
+        'profession',
+        'notes',
+    ];
+
+    public function locations(): HasMany
+    {
+        return $this->hasMany(Location::class);
+    }
+
+    public function locationsActives(): HasMany
+    {
+        return $this->hasMany(Location::class)->where('statut', 'actif');
+    }
+
+    public function evenements(): HasMany
+    {
+        return $this->hasMany(Evenement::class);
+    }
+}
+```
+
+### Modèle Location
+
+```php
+<?php
+// app/Models/Location.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Location extends Model
+{
+    use HasFactory;
+
+    protected $table = 'locations';
+
+    protected $fillable = [
+        'bien_id',
+        'locataire_id',
+        'date_debut',
+        'date_fin',
+        'loyer_mensuel',
+        'depot_garantie',
+        'statut',
+        'date_resiliation',
+        'motif_resiliation',
+        'notes',
+    ];
+
+    protected $casts = [
+        'date_debut' => 'date',
+        'date_fin' => 'date',
+        'date_resiliation' => 'date',
+        'loyer_mensuel' => 'decimal:2',
+        'depot_garantie' => 'decimal:2',
+    ];
+
+    public function bien(): BelongsTo
+    {
+        return $this->belongsTo(Bien::class);
+    }
+
+    public function locataire(): BelongsTo
+    {
+        return $this->belongsTo(Locataire::class);
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Document::class);
+    }
+
+    public function contratBail(): HasMany
+    {
+        return $this->hasMany(Document::class)->where('type', 'contrat_bail');
+    }
+
+    public function evenements(): HasMany
+    {
+        return $this->hasMany(Evenement::class);
+    }
+
+    public function scopeActives($query)
+    {
+        return $query->where('statut', 'actif');
+    }
+
+    public function scopeTerminees($query)
+    {
+        return $query->where('statut', 'termine');
+    }
+
+    public function scopeResiliees($query)
+    {
+        return $query->where('statut', 'resilie');
+    }
+}
+```
+
+### Modèle Document
+
+```php
+<?php
+// app/Models/Document.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
+
+class Document extends Model
+{
+    use HasFactory;
+
+    protected $table = 'documents';
+
+    protected $fillable = [
+        'location_id',
+        'type',
+        'nom_original',
+        'chemin_fichier',
+        'mime_type',
+        'taille',
+        'description',
+    ];
+
+    protected $casts = [
+        'taille' => 'integer',
+    ];
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
+    public function getUrlAttribute(): string
+    {
+        return Storage::url($this->chemin_fichier);
+    }
+
+    public function getTailleFormateeAttribute(): string
+    {
+        $bytes = $this->taille;
+        $units = ['B', 'KB', 'MB', 'GB'];
+        
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+
+        return round($bytes, 2) . ' ' . $units[$i];
+    }
+
+    public function getTypeLibelleAttribute(): string
+    {
+        return match($this->type) {
+            'contrat_bail' => 'Contrat de bail',
+            'avenant' => 'Avenant',
+            'etat_lieux_entree' => 'État des lieux d\'entrée',
+            'etat_lieux_sortie' => 'État des lieux de sortie',
+            'autre' => 'Autre document',
+            default => $this->type,
+        };
+    }
+}
+```
+
+### Modèle Evenement
+
+```php
+<?php
+// app/Models/Evenement.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Evenement extends Model
+{
+    use HasFactory;
+
+    protected $table = 'evenements';
+
+    protected $fillable = [
+        'type',
+        'user_id',
+        'bien_id',
+        'location_id',
+        'locataire_id',
+        'description',
+        'donnees_supplementaires',
+    ];
+
+    protected $casts = [
+        'donnees_supplementaires' => 'array',
+    ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function bien(): BelongsTo
+    {
+        return $this->belongsTo(Bien::class);
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
+    public function locataire(): BelongsTo
+    {
+        return $this->belongsTo(Locataire::class);
+    }
+
+    public function getTypeLibelleAttribute(): string
+    {
+        return match($this->type) {
+            'ajout_bien_location' => 'Ajout d\'un bien en location',
+            'attribution_locataire' => 'Attribution d\'un locataire',
+            'resiliation_location' => 'Résiliation de location',
+            default => $this->type,
+        };
+    }
+
+    public function getIconeAttribute(): string
+    {
+        return match($this->type) {
+            'ajout_bien_location' => 'fa-plus-circle',
+            'attribution_locataire' => 'fa-user-plus',
+            'resiliation_location' => 'fa-user-minus',
+            default => 'fa-info-circle',
+        };
+    }
+
+    public function getCouleurAttribute(): string
+    {
+        return match($this->type) {
+            'ajout_bien_location' => 'success',
+            'attribution_locataire' => 'primary',
+            'resiliation_location' => 'warning',
+            default => 'secondary',
+        };
+    }
+
+    public static function creerEvenement(string $type, int $userId, array $data): self
+    {
+        return self::create([
+            'type' => $type,
+            'user_id' => $userId,
+            'bien_id' => $data['bien_id'] ?? null,
+            'location_id' => $data['location_id'] ?? null,
+            'locataire_id' => $data['locataire_id'] ?? null,
+            'description' => $data['description'],
+            'donnees_supplementaires' => $data['donnees_supplementaires'] ?? null,
+        ]);
+    }
+}
+```
+
+---
+
+## 5. Contrôleurs Laravel
+
+### Contrôleur d'authentification
+
+```php
+<?php
+// app/Http/Controllers/Auth/AuthController.php
+
+namespace App\Http\Controllers\Auth;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
+
+class AuthController extends Controller
+{
+    public function showLoginForm()
+    {
+        return view('auth.login');
+    }
+
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+            $request->session()->regenerate();
+
+            $user = Auth::user();
+            
+            return match($user->role) {
+                'admin' => redirect()->intended(route('admin.dashboard')),
+                'avocat' => redirect()->intended(route('avocat.dashboard')),
+                default => redirect()->intended(route('bailleur.dashboard')),
+            };
+        }
+
+        throw ValidationException::withMessages([
+            'email' => ['Les identifiants fournis sont incorrects.'],
+        ]);
+    }
+
+    public function logout(Request $request)
+    {
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/');
+    }
+}
+```
+
+### Contrôleur Dashboard Bailleur
+
+```php
+<?php
+// app/Http/Controllers/Bailleur/DashboardController.php
+
+namespace App\Http\Controllers\Bailleur;
+
+use App\Http\Controllers\Controller;
+use App\Models\Bien;
+use App\Models\Location;
+use Illuminate\Support\Facades\Auth;
+
+class DashboardController extends Controller
+{
+    public function index()
+    {
+        $user = Auth::user();
+        
+        $stats = [
+            'total_biens' => Bien::where('user_id', $user->id)->count(),
+            'biens_loues' => Bien::where('user_id', $user->id)->where('statut', 'loue')->count(),
+            'biens_vacants' => Bien::where('user_id', $user->id)->where('statut', 'vacant')->count(),
+            'revenus_mensuels' => Location::whereHas('bien', function($q) use ($user) {
+                $q->where('user_id', $user->id);
+            })->where('statut', 'actif')->sum('loyer_mensuel'),
+        ];
+
+        $biensRecents = Bien::where('user_id', $user->id)
+            ->with('typeBien', 'locationActive.locataire')
+            ->orderBy('created_at', 'desc')
+            ->take(5)
+            ->get();
+
+        $locationsRecentes = Location::whereHas('bien', function($q) use ($user) {
+            $q->where('user_id', $user->id);
+        })
+            ->with('bien', 'locataire')
+            ->orderBy('created_at', 'desc')
+            ->take(5)
+            ->get();
+
+        return view('bailleur.dashboard', compact('stats', 'biensRecents', 'locationsRecentes'));
+    }
+}
+```
+
+### Contrôleur des Biens
+
+```php
+<?php
+// app/Http/Controllers/Bailleur/BienController.php
+
+namespace App\Http\Controllers\Bailleur;
+
+use App\Http\Controllers\Controller;
+use App\Models\Bien;
+use App\Models\TypeBien;
+use App\Models\Evenement;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class BienController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Bien::where('user_id', Auth::id())
+            ->with('typeBien', 'locationActive.locataire');
+
+        if ($request->filled('type')) {
+            $query->where('type_bien_id', $request->type);
+        }
+
+        if ($request->filled('statut')) {
+            $query->where('statut', $request->statut);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('nom', 'like', "%{$search}%")
+                  ->orWhere('adresse', 'like', "%{$search}%")
+                  ->orWhere('ville', 'like', "%{$search}%");
+            });
+        }
+
+        $biens = $query->orderBy('created_at', 'desc')->paginate(10);
+        $typesBiens = TypeBien::actifs()->get();
+
+        return view('bailleur.biens.index', compact('biens', 'typesBiens'));
+    }
+
+    public function create()
+    {
+        $typesBiens = TypeBien::actifs()->get();
+        return view('bailleur.biens.create', compact('typesBiens'));
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255',
+            'type_bien_id' => 'required|exists:types_biens,id',
+            'description' => 'nullable|string',
+            'adresse' => 'nullable|string|max:255',
+            'ville' => 'nullable|string|max:255',
+            'code_postal' => 'nullable|string|max:20',
+            'pays' => 'nullable|string|max:100',
+            'localisation_description' => 'nullable|string',
+            'superficie' => 'nullable|numeric|min:0',
+            'loyer_mensuel' => 'nullable|numeric|min:0',
+            'est_louable' => 'boolean',
+        ]);
+
+        $validated['user_id'] = Auth::id();
+        $validated['statut'] = 'vacant';
+
+        $bien = Bien::create($validated);
+
+        // Créer un événement si le bien est mis en location
+        if ($bien->est_louable) {
+            Evenement::creerEvenement('ajout_bien_location', Auth::id(), [
+                'bien_id' => $bien->id,
+                'description' => "Ajout du bien \"{$bien->nom}\" disponible à la location",
+                'donnees_supplementaires' => [
+                    'loyer_mensuel' => $bien->loyer_mensuel,
+                    'type_bien' => $bien->typeBien->nom,
+                ],
+            ]);
+        }
+
+        return redirect()->route('bailleur.biens.show', $bien)
+            ->with('success', 'Bien créé avec succès.');
+    }
+
+    public function show(Bien $bien)
+    {
+        $this->authorize('view', $bien);
+
+        $bien->load('typeBien', 'locations.locataire', 'locations.documents', 'locationActive.locataire');
+
+        return view('bailleur.biens.show', compact('bien'));
+    }
+
+    public function edit(Bien $bien)
+    {
+        $this->authorize('update', $bien);
+
+        $typesBiens = TypeBien::actifs()->get();
+
+        return view('bailleur.biens.edit', compact('bien', 'typesBiens'));
+    }
+
+    public function update(Request $request, Bien $bien)
+    {
+        $this->authorize('update', $bien);
+
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255',
+            'type_bien_id' => 'required|exists:types_biens,id',
+            'description' => 'nullable|string',
+            'adresse' => 'nullable|string|max:255',
+            'ville' => 'nullable|string|max:255',
+            'code_postal' => 'nullable|string|max:20',
+            'pays' => 'nullable|string|max:100',
+            'localisation_description' => 'nullable|string',
+            'superficie' => 'nullable|numeric|min:0',
+            'loyer_mensuel' => 'nullable|numeric|min:0',
+            'est_louable' => 'boolean',
+        ]);
+
+        $etaitLouable = $bien->est_louable;
+        $bien->update($validated);
+
+        // Créer un événement si le bien devient louable
+        if (!$etaitLouable && $bien->est_louable) {
+            Evenement::creerEvenement('ajout_bien_location', Auth::id(), [
+                'bien_id' => $bien->id,
+                'description' => "Le bien \"{$bien->nom}\" est maintenant disponible à la location",
+            ]);
+        }
+
+        return redirect()->route('bailleur.biens.show', $bien)
+            ->with('success', 'Bien mis à jour avec succès.');
+    }
+
+    public function destroy(Bien $bien)
+    {
+        $this->authorize('delete', $bien);
+
+        if ($bien->statut === 'loue') {
+            return back()->with('error', 'Impossible de supprimer un bien actuellement loué.');
+        }
+
+        $bien->delete();
+
+        return redirect()->route('bailleur.biens.index')
+            ->with('success', 'Bien supprimé avec succès.');
+    }
+}
+```
+
+### Contrôleur des Locations
+
+```php
+<?php
+// app/Http/Controllers/Bailleur/LocationController.php
+
+namespace App\Http\Controllers\Bailleur;
+
+use App\Http\Controllers\Controller;
+use App\Models\Bien;
+use App\Models\Location;
+use App\Models\Locataire;
+use App\Models\Document;
+use App\Models\Evenement;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+
+class LocationController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Location::whereHas('bien', function($q) {
+            $q->where('user_id', Auth::id());
+        })->with('bien', 'locataire', 'documents');
+
+        if ($request->filled('statut')) {
+            $query->where('statut', $request->statut);
+        }
+
+        $locations = $query->orderBy('created_at', 'desc')->paginate(10);
+
+        return view('bailleur.locations.index', compact('locations'));
+    }
+
+    public function create(Bien $bien)
+    {
+        $this->authorize('update', $bien);
+
+        if ($bien->statut === 'loue') {
+            return back()->with('error', 'Ce bien est déjà loué.');
+        }
+
+        if (!$bien->est_louable) {
+            return back()->with('error', 'Ce bien n\'est pas disponible à la location.');
+        }
+
+        return view('bailleur.locations.create', compact('bien'));
+    }
+
+    public function store(Request $request, Bien $bien)
+    {
+        $this->authorize('update', $bien);
+
+        $validated = $request->validate([
+            'locataire_nom_complet' => 'required|string|max:255',
+            'locataire_email' => 'nullable|email|max:255',
+            'locataire_telephone' => 'required|string|max:20',
+            'locataire_telephone_secondaire' => 'nullable|string|max:20',
+            'locataire_piece_identite_type' => 'nullable|string|max:50',
+            'locataire_piece_identite_numero' => 'nullable|string|max:50',
+            'locataire_adresse_actuelle' => 'nullable|string',
+            'locataire_profession' => 'nullable|string|max:100',
+            'date_debut' => 'required|date',
+            'date_fin' => 'nullable|date|after:date_debut',
+            'loyer_mensuel' => 'required|numeric|min:0',
+            'depot_garantie' => 'nullable|numeric|min:0',
+            'notes' => 'nullable|string',
+            'contrat_bail' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            // Créer le locataire
+            $locataire = Locataire::create([
+                'nom_complet' => $validated['locataire_nom_complet'],
+                'email' => $validated['locataire_email'],
+                'telephone' => $validated['locataire_telephone'],
+                'telephone_secondaire' => $validated['locataire_telephone_secondaire'],
+                'piece_identite_type' => $validated['locataire_piece_identite_type'],
+                'piece_identite_numero' => $validated['locataire_piece_identite_numero'],
+                'adresse_actuelle' => $validated['locataire_adresse_actuelle'],
+                'profession' => $validated['locataire_profession'],
+            ]);
+
+            // Créer la location
+            $location = Location::create([
+                'bien_id' => $bien->id,
+                'locataire_id' => $locataire->id,
+                'date_debut' => $validated['date_debut'],
+                'date_fin' => $validated['date_fin'],
+                'loyer_mensuel' => $validated['loyer_mensuel'],
+                'depot_garantie' => $validated['depot_garantie'],
+                'notes' => $validated['notes'],
+                'statut' => 'actif',
+            ]);
+
+            // Uploader le contrat de bail
+            if ($request->hasFile('contrat_bail')) {
+                $file = $request->file('contrat_bail');
+                $path = $file->store('contrats/' . $location->id, 'public');
+
+                Document::create([
+                    'location_id' => $location->id,
+                    'type' => 'contrat_bail',
+                    'nom_original' => $file->getClientOriginalName(),
+                    'chemin_fichier' => $path,
+                    'mime_type' => $file->getMimeType(),
+                    'taille' => $file->getSize(),
+                ]);
+            }
+
+            // Mettre à jour le statut du bien
+            $bien->update(['statut' => 'loue']);
+
+            // Créer l'événement
+            Evenement::creerEvenement('attribution_locataire', Auth::id(), [
+                'bien_id' => $bien->id,
+                'location_id' => $location->id,
+                'locataire_id' => $locataire->id,
+                'description' => "Attribution du locataire \"{$locataire->nom_complet}\" au bien \"{$bien->nom}\"",
+                'donnees_supplementaires' => [
+                    'loyer_mensuel' => $location->loyer_mensuel,
+                    'date_debut' => $location->date_debut->format('d/m/Y'),
+                ],
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('bailleur.biens.show', $bien)
+                ->with('success', 'Locataire attribué avec succès.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Une erreur est survenue : ' . $e->getMessage());
+        }
+    }
+
+    public function show(Location $location)
+    {
+        $this->authorize('view', $location->bien);
+
+        $location->load('bien', 'locataire', 'documents');
+
+        return view('bailleur.locations.show', compact('location'));
+    }
+
+    public function resilier(Request $request, Location $location)
+    {
+        $this->authorize('update', $location->bien);
+
+        if ($location->statut !== 'actif') {
+            return back()->with('error', 'Cette location n\'est pas active.');
+        }
+
+        $validated = $request->validate([
+            'date_resiliation' => 'required|date',
+            'motif_resiliation' => 'nullable|string',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $location->update([
+                'statut' => 'resilie',
+                'date_resiliation' => $validated['date_resiliation'],
+                'motif_resiliation' => $validated['motif_resiliation'],
+            ]);
+
+            $location->bien->update(['statut' => 'vacant']);
+
+            // Créer l'événement
+            Evenement::creerEvenement('resiliation_location', Auth::id(), [
+                'bien_id' => $location->bien_id,
+                'location_id' => $location->id,
+                'locataire_id' => $location->locataire_id,
+                'description' => "Résiliation du bail de \"{$location->locataire->nom_complet}\" pour le bien \"{$location->bien->nom}\"",
+                'donnees_supplementaires' => [
+                    'date_resiliation' => $validated['date_resiliation'],
+                    'motif' => $validated['motif_resiliation'],
+                ],
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('bailleur.biens.show', $location->bien)
+                ->with('success', 'Bail résilié avec succès.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Une erreur est survenue : ' . $e->getMessage());
+        }
+    }
+
+    public function uploadDocument(Request $request, Location $location)
+    {
+        $this->authorize('update', $location->bien);
+
+        $validated = $request->validate([
+            'document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'type' => 'required|in:contrat_bail,avenant,etat_lieux_entree,etat_lieux_sortie,autre',
+            'description' => 'nullable|string|max:255',
+        ]);
+
+        $file = $request->file('document');
+        $path = $file->store('documents/' . $location->id, 'public');
+
+        Document::create([
+            'location_id' => $location->id,
+            'type' => $validated['type'],
+            'nom_original' => $file->getClientOriginalName(),
+            'chemin_fichier' => $path,
+            'mime_type' => $file->getMimeType(),
+            'taille' => $file->getSize(),
+            'description' => $validated['description'],
+        ]);
+
+        return back()->with('success', 'Document uploadé avec succès.');
+    }
+}
+```
+
+### Contrôleur Dashboard Avocat
+
+```php
+<?php
+// app/Http/Controllers/Avocat/DashboardController.php
+
+namespace App\Http\Controllers\Avocat;
+
+use App\Http\Controllers\Controller;
+use App\Models\Evenement;
+use Illuminate\Http\Request;
+
+class DashboardController extends Controller
+{
+    public function index()
+    {
+        $stats = [
+            'total_evenements' => Evenement::count(),
+            'ajouts_biens' => Evenement::where('type', 'ajout_bien_location')->count(),
+            'attributions' => Evenement::where('type', 'attribution_locataire')->count(),
+            'resiliations' => Evenement::where('type', 'resiliation_location')->count(),
+        ];
+
+        $evenementsRecents = Evenement::with('user', 'bien', 'locataire', 'location')
+            ->orderBy('created_at', 'desc')
+            ->take(10)
+            ->get();
+
+        return view('avocat.dashboard', compact('stats', 'evenementsRecents'));
+    }
+}
+```
+
+### Contrôleur des Événements (Avocat)
+
+```php
+<?php
+// app/Http/Controllers/Avocat/EvenementController.php
+
+namespace App\Http\Controllers\Avocat;
+
+use App\Http\Controllers\Controller;
+use App\Models\Evenement;
+use Illuminate\Http\Request;
+
+class EvenementController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Evenement::with('user', 'bien', 'locataire', 'location.documents');
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+
+        if ($request->filled('date_debut')) {
+            $query->whereDate('created_at', '>=', $request->date_debut);
+        }
+
+        if ($request->filled('date_fin')) {
+            $query->whereDate('created_at', '<=', $request->date_fin);
+        }
+
+        $evenements = $query->orderBy('created_at', 'desc')->paginate(20);
+
+        return view('avocat.evenements.index', compact('evenements'));
+    }
+
+    public function show(Evenement $evenement)
+    {
+        $evenement->load('user', 'bien.typeBien', 'locataire', 'location.documents');
+
+        return view('avocat.evenements.show', compact('evenement'));
+    }
+}
+```
+
+### Contrôleur Admin - Types de Biens
+
+```php
+<?php
+// app/Http/Controllers/Admin/TypeBienController.php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\TypeBien;
+use Illuminate\Http\Request;
+
+class TypeBienController extends Controller
+{
+    public function index()
+    {
+        $typesBiens = TypeBien::withCount('biens')->orderBy('nom')->get();
+
+        return view('admin.types-biens.index', compact('typesBiens'));
+    }
+
+    public function create()
+    {
+        return view('admin.types-biens.create');
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255|unique:types_biens,nom',
+            'categorie' => 'required|in:immobilier,mobilier',
+            'description' => 'nullable|string',
+            'necessite_adresse' => 'boolean',
+        ]);
+
+        TypeBien::create($validated);
+
+        return redirect()->route('admin.types-biens.index')
+            ->with('success', 'Type de bien créé avec succès.');
+    }
+
+    public function edit(TypeBien $typeBien)
+    {
+        return view('admin.types-biens.edit', compact('typeBien'));
+    }
+
+    public function update(Request $request, TypeBien $typeBien)
+    {
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255|unique:types_biens,nom,' . $typeBien->id,
+            'categorie' => 'required|in:immobilier,mobilier',
+            'description' => 'nullable|string',
+            'necessite_adresse' => 'boolean',
+            'actif' => 'boolean',
+        ]);
+
+        $typeBien->update($validated);
+
+        return redirect()->route('admin.types-biens.index')
+            ->with('success', 'Type de bien mis à jour avec succès.');
+    }
+
+    public function destroy(TypeBien $typeBien)
+    {
+        if ($typeBien->biens()->exists()) {
+            return back()->with('error', 'Impossible de supprimer ce type car des biens y sont associés.');
+        }
+
+        $typeBien->delete();
+
+        return redirect()->route('admin.types-biens.index')
+            ->with('success', 'Type de bien supprimé avec succès.');
+    }
+}
+```
+
+### Contrôleur Admin Dashboard
+
+```php
+<?php
+// app/Http/Controllers/Admin/DashboardController.php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Models\Bien;
+use App\Models\Location;
+use App\Models\TypeBien;
+
+class DashboardController extends Controller
+{
+    public function index()
+    {
+        $stats = [
+            'total_utilisateurs' => User::count(),
+            'total_bailleurs' => User::where('role', 'bailleur')->count(),
+            'total_biens' => Bien::count(),
+            'total_locations_actives' => Location::where('statut', 'actif')->count(),
+            'total_types_biens' => TypeBien::count(),
+        ];
+
+        $derniersUtilisateurs = User::orderBy('created_at', 'desc')->take(5)->get();
+
+        return view('admin.dashboard', compact('stats', 'derniersUtilisateurs'));
+    }
+}
+```
+
+---
+
+## 6. Policies Laravel
+
+### Policy pour les Biens
+
+```php
+<?php
+// app/Policies/BienPolicy.php
+
+namespace App\Policies;
+
+use App\Models\Bien;
+use App\Models\User;
+
+class BienPolicy
+{
+    public function viewAny(User $user): bool
+    {
+        return true;
+    }
+
+    public function view(User $user, Bien $bien): bool
+    {
+        return $user->id === $bien->user_id || $user->isAdmin() || $user->isAvocat();
+    }
+
+    public function create(User $user): bool
+    {
+        return $user->isBailleur();
+    }
+
+    public function update(User $user, Bien $bien): bool
+    {
+        return $user->id === $bien->user_id;
+    }
+
+    public function delete(User $user, Bien $bien): bool
+    {
+        return $user->id === $bien->user_id;
+    }
+}
+```
+
+### Enregistrement des Policies
+
+```php
+<?php
+// app/Providers/AppServiceProvider.php
+
+namespace App\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Gate;
+use App\Models\Bien;
+use App\Policies\BienPolicy;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        //
+    }
+
+    public function boot(): void
+    {
+        Gate::policy(Bien::class, BienPolicy::class);
+    }
+}
+```
+
+---
+
+## 7. Middlewares
+
+### Middleware de vérification de rôle
+
+```php
+<?php
+// app/Http/Middleware/CheckRole.php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+class CheckRole
+{
+    public function handle(Request $request, Closure $next, string ...$roles): Response
+    {
+        if (!$request->user()) {
+            return redirect()->route('login');
+        }
+
+        if (!in_array($request->user()->role, $roles)) {
+            abort(403, 'Accès non autorisé.');
+        }
+
+        return $next($request);
+    }
+}
+```
+
+### Enregistrement du Middleware
+
+```php
+<?php
+// bootstrap/app.php
+
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware) {
+        $middleware->alias([
+            'role' => \App\Http\Middleware\CheckRole::class,
+        ]);
+    })
+    ->withExceptions(function (Exceptions $exceptions) {
+        //
+    })->create();
+```
+
+---
+
+## 8. Routes Laravel
+
+```php
+<?php
+// routes/web.php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Bailleur\DashboardController as BailleurDashboardController;
+use App\Http\Controllers\Bailleur\BienController;
+use App\Http\Controllers\Bailleur\LocationController;
+use App\Http\Controllers\Avocat\DashboardController as AvocatDashboardController;
+use App\Http\Controllers\Avocat\EvenementController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\TypeBienController;
+
+// Routes publiques
+Route::get('/', function () {
+    return redirect()->route('login');
+});
+
+// Authentification
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
+    Route::post('/login', [AuthController::class, 'login']);
+});
+
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middleware('auth');
+
+// Routes Bailleur
+Route::middleware(['auth', 'role:bailleur'])->prefix('bailleur')->name('bailleur.')->group(function () {
+    Route::get('/dashboard', [BailleurDashboardController::class, 'index'])->name('dashboard');
+    
+    // Gestion des biens
+    Route::resource('biens', BienController::class);
+    
+    // Gestion des locations
+    Route::get('/locations', [LocationController::class, 'index'])->name('locations.index');
+    Route::get('/biens/{bien}/locations/create', [LocationController::class, 'create'])->name('locations.create');
+    Route::post('/biens/{bien}/locations', [LocationController::class, 'store'])->name('locations.store');
+    Route::get('/locations/{location}', [LocationController::class, 'show'])->name('locations.show');
+    Route::post('/locations/{location}/resilier', [LocationController::class, 'resilier'])->name('locations.resilier');
+    Route::post('/locations/{location}/documents', [LocationController::class, 'uploadDocument'])->name('locations.documents.store');
+});
+
+// Routes Avocat
+Route::middleware(['auth', 'role:avocat'])->prefix('avocat')->name('avocat.')->group(function () {
+    Route::get('/dashboard', [AvocatDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/evenements', [EvenementController::class, 'index'])->name('evenements.index');
+    Route::get('/evenements/{evenement}', [EvenementController::class, 'show'])->name('evenements.show');
+});
+
+// Routes Admin
+Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+    Route::resource('types-biens', TypeBienController::class);
+});
+```
+
+---
+
+## 9. Vues Laravel (Blade)
+
+### Layout principal
+
+```blade
+{{-- resources/views/layouts/app.blade.php --}}
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>@yield('title', 'Gestion des Biens') - GestImmo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --secondary-color: #6366f1;
+        }
+        body {
+            background-color: #f3f4f6;
+        }
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+        }
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.8);
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        .sidebar .nav-link i {
+            width: 24px;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-radius: 0.75rem;
+        }
+        .stat-card {
+            transition: transform 0.2s;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+        .badge-vacant { background-color: #22c55e; }
+        .badge-loue { background-color: #3b82f6; }
+        .badge-indisponible { background-color: #ef4444; }
+    </style>
+    @stack('styles')
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            {{-- Sidebar --}}
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse py-3">
+                <div class="position-sticky">
+                    <div class="text-center mb-4">
+                        <h4 class="text-white fw-bold">
+                            <i class="fas fa-building me-2"></i>GestImmo
+                        </h4>
+                    </div>
+                    
+                    <ul class="nav flex-column px-2">
+                        @if(auth()->user()->isBailleur())
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('bailleur.dashboard') ? 'active' : '' }}" href="{{ route('bailleur.dashboard') }}">
+                                    <i class="fas fa-home me-2"></i> Tableau de bord
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('bailleur.biens.*') ? 'active' : '' }}" href="{{ route('bailleur.biens.index') }}">
+                                    <i class="fas fa-building me-2"></i> Mes biens
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('bailleur.locations.*') ? 'active' : '' }}" href="{{ route('bailleur.locations.index') }}">
+                                    <i class="fas fa-file-contract me-2"></i> Locations
+                                </a>
+                            </li>
+                        @elseif(auth()->user()->isAvocat())
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('avocat.dashboard') ? 'active' : '' }}" href="{{ route('avocat.dashboard') }}">
+                                    <i class="fas fa-home me-2"></i> Tableau de bord
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('avocat.evenements.*') ? 'active' : '' }}" href="{{ route('avocat.evenements.index') }}">
+                                    <i class="fas fa-history me-2"></i> Journal des événements
+                                </a>
+                            </li>
+                        @elseif(auth()->user()->isAdmin())
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
+                                    <i class="fas fa-home me-2"></i> Tableau de bord
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('admin.types-biens.*') ? 'active' : '' }}" href="{{ route('admin.types-biens.index') }}">
+                                    <i class="fas fa-tags me-2"></i> Types de biens
+                                </a>
+                            </li>
+                        @endif
+                    </ul>
+
+                    <hr class="text-white-50 mx-3">
+
+                    <ul class="nav flex-column px-2">
+                        <li class="nav-item">
+                            <form action="{{ route('logout') }}" method="POST">
+                                @csrf
+                                <button type="submit" class="nav-link border-0 bg-transparent w-100 text-start">
+                                    <i class="fas fa-sign-out-alt me-2"></i> Déconnexion
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            {{-- Main content --}}
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 py-4">
+                {{-- Header --}}
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pb-2 mb-3 border-bottom">
+                    <h1 class="h4">@yield('header', 'Dashboard')</h1>
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted me-3">{{ auth()->user()->name }}</span>
+                        <span class="badge bg-primary">{{ ucfirst(auth()->user()->role) }}</span>
+                    </div>
+                </div>
+
+                {{-- Alerts --}}
+                @if(session('success'))
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="fas fa-check-circle me-2"></i>{{ session('success') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                @endif
+
+                @if(session('error'))
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="fas fa-exclamation-circle me-2"></i>{{ session('error') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                @endif
+
+                @if($errors->any())
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        <ul class="mb-0">
+                            @foreach($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                @endif
+
+                @yield('content')
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    @stack('scripts')
+</body>
+</html>
+```
+
+### Vue de connexion
+
+```blade
+{{-- resources/views/auth/login.blade.php --}}
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion - GestImmo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            max-width: 400px;
+            width: 100%;
+            border-radius: 1rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card login-card mx-auto">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <h2 class="fw-bold text-primary">GestImmo</h2>
+                    <p class="text-muted">Gestion des biens immobiliers et mobiliers</p>
+                </div>
+
+                @if($errors->any())
+                    <div class="alert alert-danger">
+                        @foreach($errors->all() as $error)
+                            <div>{{ $error }}</div>
+                        @endforeach
+                    </div>
+                @endif
+
+                <form action="{{ route('login') }}" method="POST">
+                    @csrf
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Adresse email</label>
+                        <input type="email" class="form-control" id="email" name="email" value="{{ old('email') }}" required autofocus>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Mot de passe</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="remember" name="remember">
+                        <label class="form-check-label" for="remember">Se souvenir de moi</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        Se connecter
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+```
+
+### Dashboard Bailleur
+
+```blade
+{{-- resources/views/bailleur/dashboard.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Tableau de bord')
+@section('header', 'Tableau de bord')
+
+@section('content')
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted mb-1">Total des biens</p>
+                        <h3 class="mb-0">{{ $stats['total_biens'] }}</h3>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 p-3 rounded">
+                        <i class="fas fa-building text-primary fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted mb-1">Biens loués</p>
+                        <h3 class="mb-0">{{ $stats['biens_loues'] }}</h3>
+                    </div>
+                    <div class="bg-success bg-opacity-10 p-3 rounded">
+                        <i class="fas fa-check-circle text-success fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted mb-1">Biens vacants</p>
+                        <h3 class="mb-0">{{ $stats['biens_vacants'] }}</h3>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 p-3 rounded">
+                        <i class="fas fa-exclamation-circle text-warning fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted mb-1">Revenus mensuels</p>
+                        <h3 class="mb-0">{{ number_format($stats['revenus_mensuels'], 0, ',', ' ') }} €</h3>
+                    </div>
+                    <div class="bg-info bg-opacity-10 p-3 rounded">
+                        <i class="fas fa-euro-sign text-info fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Derniers biens ajoutés</h5>
+                <a href="{{ route('bailleur.biens.create') }}" class="btn btn-sm btn-primary">
+                    <i class="fas fa-plus me-1"></i> Ajouter
+                </a>
+            </div>
+            <div class="card-body">
+                @forelse($biensRecents as $bien)
+                    <div class="d-flex justify-content-between align-items-center py-2 {{ !$loop->last ? 'border-bottom' : '' }}">
+                        <div>
+                            <h6 class="mb-0">{{ $bien->nom }}</h6>
+                            <small class="text-muted">{{ $bien->typeBien->nom }} - {{ $bien->adresse_complete }}</small>
+                        </div>
+                        <span class="badge badge-{{ $bien->statut }}">{{ ucfirst($bien->statut) }}</span>
+                    </div>
+                @empty
+                    <p class="text-muted text-center mb-0">Aucun bien enregistré</p>
+                @endforelse
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Dernières locations</h5>
+            </div>
+            <div class="card-body">
+                @forelse($locationsRecentes as $location)
+                    <div class="d-flex justify-content-between align-items-center py-2 {{ !$loop->last ? 'border-bottom' : '' }}">
+                        <div>
+                            <h6 class="mb-0">{{ $location->locataire->nom_complet }}</h6>
+                            <small class="text-muted">{{ $location->bien->nom }} - depuis le {{ $location->date_debut->format('d/m/Y') }}</small>
+                        </div>
+                        <span class="badge bg-{{ $location->statut === 'actif' ? 'success' : 'secondary' }}">
+                            {{ ucfirst($location->statut) }}
+                        </span>
+                    </div>
+                @empty
+                    <p class="text-muted text-center mb-0">Aucune location</p>
+                @endforelse
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+### Liste des biens
+
+```blade
+{{-- resources/views/bailleur/biens/index.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Mes biens')
+@section('header', 'Mes biens')
+
+@section('content')
+<div class="card mb-4">
+    <div class="card-body">
+        <form action="{{ route('bailleur.biens.index') }}" method="GET" class="row g-3">
+            <div class="col-md-4">
+                <input type="text" class="form-control" name="search" placeholder="Rechercher..." value="{{ request('search') }}">
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" name="type">
+                    <option value="">Tous les types</option>
+                    @foreach($typesBiens as $type)
+                        <option value="{{ $type->id }}" {{ request('type') == $type->id ? 'selected' : '' }}>
+                            {{ $type->nom }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" name="statut">
+                    <option value="">Tous les statuts</option>
+                    <option value="vacant" {{ request('statut') == 'vacant' ? 'selected' : '' }}>Vacant</option>
+                    <option value="loue" {{ request('statut') == 'loue' ? 'selected' : '' }}>Loué</option>
+                    <option value="indisponible" {{ request('statut') == 'indisponible' ? 'selected' : '' }}>Indisponible</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-search me-1"></i> Filtrer
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <p class="text-muted mb-0">{{ $biens->total() }} bien(s) trouvé(s)</p>
+    <a href="{{ route('bailleur.biens.create') }}" class="btn btn-primary">
+        <i class="fas fa-plus me-1"></i> Ajouter un bien
+    </a>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Nom</th>
+                    <th>Type</th>
+                    <th>Localisation</th>
+                    <th>Loyer</th>
+                    <th>Statut</th>
+                    <th>Locataire</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse($biens as $bien)
+                    <tr>
+                        <td>
+                            <a href="{{ route('bailleur.biens.show', $bien) }}" class="text-decoration-none fw-semibold">
+                                {{ $bien->nom }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">{{ $bien->typeBien->nom }}</span>
+                        </td>
+                        <td>{{ Str::limit($bien->adresse_complete, 30) }}</td>
+                        <td>
+                            @if($bien->loyer_mensuel)
+                                {{ number_format($bien->loyer_mensuel, 0, ',', ' ') }} €/mois
+                            @else
+                                -
+                            @endif
+                        </td>
+                        <td>
+                            <span class="badge badge-{{ $bien->statut }}">{{ ucfirst($bien->statut) }}</span>
+                        </td>
+                        <td>
+                            @if($bien->locationActive)
+                                {{ $bien->locationActive->locataire->nom_complet }}
+                            @else
+                                -
+                            @endif
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ route('bailleur.biens.show', $bien) }}" class="btn btn-outline-primary" title="Voir">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{{ route('bailleur.biens.edit', $bien) }}" class="btn btn-outline-secondary" title="Modifier">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                @if($bien->statut === 'vacant' && $bien->est_louable)
+                                    <a href="{{ route('bailleur.locations.create', $bien) }}" class="btn btn-outline-success" title="Attribuer un locataire">
+                                        <i class="fas fa-user-plus"></i>
+                                    </a>
+                                @endif
+                            </div>
+                        </td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="7" class="text-center py-4">
+                            <p class="text-muted mb-0">Aucun bien trouvé</p>
+                        </td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="d-flex justify-content-center mt-4">
+    {{ $biens->withQueryString()->links() }}
+</div>
+@endsection
+```
+
+### Formulaire de création de bien
+
+```blade
+{{-- resources/views/bailleur/biens/create.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Ajouter un bien')
+@section('header', 'Ajouter un bien')
+
+@section('content')
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <form action="{{ route('bailleur.biens.store') }}" method="POST">
+                    @csrf
+
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label for="nom" class="form-label">Nom du bien *</label>
+                            <input type="text" class="form-control @error('nom') is-invalid @enderror" 
+                                   id="nom" name="nom" value="{{ old('nom') }}" required>
+                            @error('nom')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="type_bien_id" class="form-label">Type de bien *</label>
+                            <select class="form-select @error('type_bien_id') is-invalid @enderror" 
+                                    id="type_bien_id" name="type_bien_id" required>
+                                <option value="">Sélectionner...</option>
+                                @foreach($typesBiens as $type)
+                                    <option value="{{ $type->id }}" 
+                                            data-necessite-adresse="{{ $type->necessite_adresse ? '1' : '0' }}"
+                                            {{ old('type_bien_id') == $type->id ? 'selected' : '' }}>
+                                        {{ $type->nom }} ({{ ucfirst($type->categorie) }})
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('type_bien_id')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-12">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control @error('description') is-invalid @enderror" 
+                                      id="description" name="description" rows="3">{{ old('description') }}</textarea>
+                            @error('description')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h5>Localisation</h5>
+
+                    <div id="adresse-section" class="row g-3">
+                        <div class="col-12">
+                            <label for="adresse" class="form-label">Adresse</label>
+                            <input type="text" class="form-control @error('adresse') is-invalid @enderror" 
+                                   id="adresse" name="adresse" value="{{ old('adresse') }}">
+                            @error('adresse')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="code_postal" class="form-label">Code postal</label>
+                            <input type="text" class="form-control @error('code_postal') is-invalid @enderror" 
+                                   id="code_postal" name="code_postal" value="{{ old('code_postal') }}">
+                            @error('code_postal')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="ville" class="form-label">Ville</label>
+                            <input type="text" class="form-control @error('ville') is-invalid @enderror" 
+                                   id="ville" name="ville" value="{{ old('ville') }}">
+                            @error('ville')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="pays" class="form-label">Pays</label>
+                            <input type="text" class="form-control @error('pays') is-invalid @enderror" 
+                                   id="pays" name="pays" value="{{ old('pays', 'France') }}">
+                            @error('pays')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <div id="localisation-description-section" class="row g-3 mt-2" style="display: none;">
+                        <div class="col-12">
+                            <label for="localisation_description" class="form-label">Description de la localisation</label>
+                            <textarea class="form-control @error('localisation_description') is-invalid @enderror" 
+                                      id="localisation_description" name="localisation_description" 
+                                      rows="2">{{ old('localisation_description') }}</textarea>
+                            <small class="text-muted">Pour les biens mobiliers, décrivez où se trouve le bien</small>
+                            @error('localisation_description')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h5>Informations de location</h5>
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="superficie" class="form-label">Superficie (m²)</label>
+                            <input type="number" step="0.01" class="form-control @error('superficie') is-invalid @enderror" 
+                                   id="superficie" name="superficie" value="{{ old('superficie') }}">
+                            @error('superficie')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="loyer_mensuel" class="form-label">Loyer mensuel (€)</label>
+                            <input type="number" step="0.01" class="form-control @error('loyer_mensuel') is-invalid @enderror" 
+                                   id="loyer_mensuel" name="loyer_mensuel" value="{{ old('loyer_mensuel') }}">
+                            @error('loyer_mensuel')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check">
+                                <input type="hidden" name="est_louable" value="0">
+                                <input class="form-check-input" type="checkbox" id="est_louable" 
+                                       name="est_louable" value="1" {{ old('est_louable') ? 'checked' : '' }}>
+                                <label class="form-check-label" for="est_louable">
+                                    Disponible à la location
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="{{ route('bailleur.biens.index') }}" class="btn btn-outline-secondary">Annuler</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i> Enregistrer
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+document.getElementById('type_bien_id').addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    const necessiteAdresse = selectedOption.dataset.necessiteAdresse === '1';
+    
+    document.getElementById('adresse-section').style.display = necessiteAdresse ? 'flex' : 'none';
+    document.getElementById('localisation-description-section').style.display = necessiteAdresse ? 'none' : 'block';
+});
+</script>
+@endpush
+```
+
+### Détail d'un bien
+
+```blade
+{{-- resources/views/bailleur/biens/show.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', $bien->nom)
+@section('header', $bien->nom)
+
+@section('content')
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Informations du bien</h5>
+                <div>
+                    <a href="{{ route('bailleur.biens.edit', $bien) }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-edit me-1"></i> Modifier
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="text-muted small">Type de bien</label>
+                        <p class="mb-0 fw-semibold">{{ $bien->typeBien->nom }}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="text-muted small">Statut</label>
+                        <p class="mb-0">
+                            <span class="badge badge-{{ $bien->statut }}">{{ ucfirst($bien->statut) }}</span>
+                        </p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="text-muted small">Localisation</label>
+                        <p class="mb-0">{{ $bien->adresse_complete }}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="text-muted small">Superficie</label>
+                        <p class="mb-0">{{ $bien->superficie ? $bien->superficie . ' m²' : 'Non renseignée' }}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="text-muted small">Loyer mensuel</label>
+                        <p class="mb-0">{{ $bien->loyer_mensuel ? number_format($bien->loyer_mensuel, 0, ',', ' ') . ' €' : 'Non renseigné' }}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="text-muted small">Disponible à la location</label>
+                        <p class="mb-0">
+                            @if($bien->est_louable)
+                                <span class="text-success"><i class="fas fa-check-circle me-1"></i>Oui</span>
+                            @else
+                                <span class="text-muted"><i class="fas fa-times-circle me-1"></i>Non</span>
+                            @endif
+                        </p>
+                    </div>
+                </div>
+
+                @if($bien->description)
+                    <hr>
+                    <label class="text-muted small">Description</label>
+                    <p class="mb-0">{{ $bien->description }}</p>
+                @endif
+            </div>
+        </div>
+
+        {{-- Historique des locations --}}
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Historique des locations</h5>
+            </div>
+            <div class="card-body">
+                @forelse($bien->locations as $location)
+                    <div class="border rounded p-3 mb-3 {{ $loop->last ? '' : '' }}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">{{ $location->locataire->nom_complet }}</h6>
+                                <p class="text-muted small mb-2">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    Du {{ $location->date_debut->format('d/m/Y') }}
+                                    @if($location->date_fin)
+                                        au {{ $location->date_fin->format('d/m/Y') }}
+                                    @endif
+                                </p>
+                                <p class="mb-0">
+                                    <span class="badge bg-{{ $location->statut === 'actif' ? 'success' : ($location->statut === 'resilie' ? 'warning' : 'secondary') }}">
+                                        {{ ucfirst($location->statut) }}
+                                    </span>
+                                    <span class="ms-2">{{ number_format($location->loyer_mensuel, 0, ',', ' ') }} €/mois</span>
+                                </p>
+                            </div>
+                            <a href="{{ route('bailleur.locations.show', $location) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-eye me-1"></i> Détails
+                            </a>
+                        </div>
+                    </div>
+                @empty
+                    <p class="text-muted text-center mb-0">Aucune location pour ce bien</p>
+                @endforelse
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        {{-- Actions --}}
+        <div class="card mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Actions</h5>
+            </div>
+            <div class="card-body">
+                @if($bien->statut === 'vacant' && $bien->est_louable)
+                    <a href="{{ route('bailleur.locations.create', $bien) }}" class="btn btn-success w-100 mb-2">
+                        <i class="fas fa-user-plus me-1"></i> Attribuer un locataire
+                    </a>
+                @endif
+                
+                <a href="{{ route('bailleur.biens.edit', $bien) }}" class="btn btn-outline-primary w-100 mb-2">
+                    <i class="fas fa-edit me-1"></i> Modifier le bien
+                </a>
+
+                @if($bien->statut !== 'loue')
+                    <form action="{{ route('bailleur.biens.destroy', $bien) }}" method="POST" 
+                          onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce bien ?')">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-outline-danger w-100">
+                            <i class="fas fa-trash me-1"></i> Supprimer
+                        </button>
+                    </form>
+                @endif
+            </div>
+        </div>
+
+        {{-- Locataire actuel --}}
+        @if($bien->locationActive)
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Locataire actuel</h5>
+                </div>
+                <div class="card-body">
+                    <h6>{{ $bien->locationActive->locataire->nom_complet }}</h6>
+                    <p class="text-muted small mb-2">
+                        <i class="fas fa-phone me-1"></i> {{ $bien->locationActive->locataire->telephone }}
+                    </p>
+                    @if($bien->locationActive->locataire->email)
+                        <p class="text-muted small mb-2">
+                            <i class="fas fa-envelope me-1"></i> {{ $bien->locationActive->locataire->email }}
+                        </p>
+                    @endif
+                    <p class="mb-3">
+                        <small class="text-muted">Depuis le {{ $bien->locationActive->date_debut->format('d/m/Y') }}</small>
+                    </p>
+                    
+                    <button type="button" class="btn btn-warning w-100" data-bs-toggle="modal" data-bs-target="#resilierModal">
+                        <i class="fas fa-user-minus me-1"></i> Résilier le bail
+                    </button>
+                </div>
+            </div>
+
+            {{-- Modal de résiliation --}}
+            <div class="modal fade" id="resilierModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form action="{{ route('bailleur.locations.resilier', $bien->locationActive) }}" method="POST">
+                            @csrf
+                            <div class="modal-header">
+                                <h5 class="modal-title">Résilier le bail</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="date_resiliation" class="form-label">Date de résiliation *</label>
+                                    <input type="date" class="form-control" id="date_resiliation" 
+                                           name="date_resiliation" value="{{ date('Y-m-d') }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="motif_resiliation" class="form-label">Motif de la résiliation</label>
+                                    <textarea class="form-control" id="motif_resiliation" 
+                                              name="motif_resiliation" rows="3"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                <button type="submit" class="btn btn-warning">Confirmer la résiliation</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endif
+    </div>
+</div>
+@endsection
+```
+
+### Formulaire d'attribution de locataire
+
+```blade
+{{-- resources/views/bailleur/locations/create.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Attribuer un locataire')
+@section('header', 'Attribuer un locataire - ' . $bien->nom)
+
+@section('content')
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card">
+            <div class="card-body">
+                <form action="{{ route('bailleur.locations.store', $bien) }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+
+                    <h5 class="mb-3">Informations du locataire</h5>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="locataire_nom_complet" class="form-label">Nom complet *</label>
+                            <input type="text" class="form-control @error('locataire_nom_complet') is-invalid @enderror" 
+                                   id="locataire_nom_complet" name="locataire_nom_complet" 
+                                   value="{{ old('locataire_nom_complet') }}" required>
+                            @error('locataire_nom_complet')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="locataire_email" class="form-label">Email</label>
+                            <input type="email" class="form-control @error('locataire_email') is-invalid @enderror" 
+                                   id="locataire_email" name="locataire_email" 
+                                   value="{{ old('locataire_email') }}">
+                            @error('locataire_email')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="locataire_telephone" class="form-label">Téléphone principal *</label>
+                            <input type="tel" class="form-control @error('locataire_telephone') is-invalid @enderror" 
+                                   id="locataire_telephone" name="locataire_telephone" 
+                                   value="{{ old('locataire_telephone') }}" required>
+                            @error('locataire_telephone')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="locataire_telephone_secondaire" class="form-label">Téléphone secondaire</label>
+                            <input type="tel" class="form-control @error('locataire_telephone_secondaire') is-invalid @enderror" 
+                                   id="locataire_telephone_secondaire" name="locataire_telephone_secondaire" 
+                                   value="{{ old('locataire_telephone_secondaire') }}">
+                            @error('locataire_telephone_secondaire')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="locataire_piece_identite_type" class="form-label">Type de pièce d'identité</label>
+                            <select class="form-select @error('locataire_piece_identite_type') is-invalid @enderror" 
+                                    id="locataire_piece_identite_type" name="locataire_piece_identite_type">
+                                <option value="">Sélectionner...</option>
+                                <option value="cni" {{ old('locataire_piece_identite_type') == 'cni' ? 'selected' : '' }}>Carte d'identité</option>
+                                <option value="passeport" {{ old('locataire_piece_identite_type') == 'passeport' ? 'selected' : '' }}>Passeport</option>
+                                <option value="titre_sejour" {{ old('locataire_piece_identite_type') == 'titre_sejour' ? 'selected' : '' }}>Titre de séjour</option>
+                                <option value="permis" {{ old('locataire_piece_identite_type') == 'permis' ? 'selected' : '' }}>Permis de conduire</option>
+                            </select>
+                            @error('locataire_piece_identite_type')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="locataire_piece_identite_numero" class="form-label">Numéro de pièce d'identité</label>
+                            <input type="text" class="form-control @error('locataire_piece_identite_numero') is-invalid @enderror" 
+                                   id="locataire_piece_identite_numero" name="locataire_piece_identite_numero" 
+                                   value="{{ old('locataire_piece_identite_numero') }}">
+                            @error('locataire_piece_identite_numero')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="locataire_profession" class="form-label">Profession</label>
+                            <input type="text" class="form-control @error('locataire_profession') is-invalid @enderror" 
+                                   id="locataire_profession" name="locataire_profession" 
+                                   value="{{ old('locataire_profession') }}">
+                            @error('locataire_profession')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-12">
+                            <label for="locataire_adresse_actuelle" class="form-label">Adresse actuelle</label>
+                            <textarea class="form-control @error('locataire_adresse_actuelle') is-invalid @enderror" 
+                                      id="locataire_adresse_actuelle" name="locataire_adresse_actuelle" 
+                                      rows="2">{{ old('locataire_adresse_actuelle') }}</textarea>
+                            @error('locataire_adresse_actuelle')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h5 class="mb-3">Informations du bail</h5>
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="date_debut" class="form-label">Date de début *</label>
+                            <input type="date" class="form-control @error('date_debut') is-invalid @enderror" 
+                                   id="date_debut" name="date_debut" 
+                                   value="{{ old('date_debut', date('Y-m-d')) }}" required>
+                            @error('date_debut')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="date_fin" class="form-label">Date de fin</label>
+                            <input type="date" class="form-control @error('date_fin') is-invalid @enderror" 
+                                   id="date_fin" name="date_fin" value="{{ old('date_fin') }}">
+                            @error('date_fin')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="loyer_mensuel" class="form-label">Loyer mensuel (€) *</label>
+                            <input type="number" step="0.01" class="form-control @error('loyer_mensuel') is-invalid @enderror" 
+                                   id="loyer_mensuel" name="loyer_mensuel" 
+                                   value="{{ old('loyer_mensuel', $bien->loyer_mensuel) }}" required>
+                            @error('loyer_mensuel')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="depot_garantie" class="form-label">Dépôt de garantie (€)</label>
+                            <input type="number" step="0.01" class="form-control @error('depot_garantie') is-invalid @enderror" 
+                                   id="depot_garantie" name="depot_garantie" value="{{ old('depot_garantie') }}">
+                            @error('depot_garantie')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-8">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control @error('notes') is-invalid @enderror" 
+                                      id="notes" name="notes" rows="2">{{ old('notes') }}</textarea>
+                            @error('notes')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h5 class="mb-3">Contrat de bail *</h5>
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="contrat_bail" class="form-label">Document du contrat de bail</label>
+                            <input type="file" class="form-control @error('contrat_bail') is-invalid @enderror" 
+                                   id="contrat_bail" name="contrat_bail" 
+                                   accept=".pdf,.jpg,.jpeg,.png" required>
+                            <small class="text-muted">Formats acceptés : PDF, JPG, PNG. Taille max : 10 Mo</small>
+                            @error('contrat_bail')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-12">
+                            <p class="text-muted mb-2">Ou capturez une photo :</p>
+                            <button type="button" class="btn btn-outline-secondary" id="captureBtn">
+                                <i class="fas fa-camera me-1"></i> Prendre une photo
+                            </button>
+                            <video id="video" class="d-none mt-2" width="100%" autoplay></video>
+                            <canvas id="canvas" class="d-none"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="{{ route('bailleur.biens.show', $bien) }}" class="btn btn-outline-secondary">Annuler</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i> Enregistrer la location
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+let stream = null;
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const captureBtn = document.getElementById('captureBtn');
+const fileInput = document.getElementById('contrat_bail');
+
+captureBtn.addEventListener('click', async function() {
+    if (stream) {
+        // Capture photo
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        
+        canvas.toBlob(function(blob) {
+            const file = new File([blob], 'contrat_capture.jpg', { type: 'image/jpeg' });
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            
+            // Arrêter la caméra
+            stream.getTracks().forEach(track => track.stop());
+            video.classList.add('d-none');
+            captureBtn.innerHTML = '<i class="fas fa-camera me-1"></i> Prendre une photo';
+            stream = null;
+        }, 'image/jpeg', 0.9);
+    } else {
+        // Démarrer la caméra
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            video.classList.remove('d-none');
+            captureBtn.innerHTML = '<i class="fas fa-camera me-1"></i> Capturer';
+        } catch (err) {
+            alert('Impossible d\'accéder à la caméra : ' + err.message);
+        }
+    }
+});
+</script>
+@endpush
+```
+
+### Dashboard Avocat
+
+```blade
+{{-- resources/views/avocat/dashboard.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Tableau de bord Avocat')
+@section('header', 'Tableau de bord')
+
+@section('content')
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card h-100 border-start border-4 border-primary">
+            <div class="card-body">
+                <p class="text-muted mb-1">Total événements</p>
+                <h3 class="mb-0">{{ $stats['total_evenements'] }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100 border-start border-4 border-success">
+            <div class="card-body">
+                <p class="text-muted mb-1">Ajouts de biens</p>
+                <h3 class="mb-0">{{ $stats['ajouts_biens'] }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100 border-start border-4 border-info">
+            <div class="card-body">
+                <p class="text-muted mb-1">Attributions</p>
+                <h3 class="mb-0">{{ $stats['attributions'] }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100 border-start border-4 border-warning">
+            <div class="card-body">
+                <p class="text-muted mb-1">Résiliations</p>
+                <h3 class="mb-0">{{ $stats['resiliations'] }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Derniers événements</h5>
+        <a href="{{ route('avocat.evenements.index') }}" class="btn btn-sm btn-outline-primary">
+            Voir tout
+        </a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Bien</th>
+                        <th>Locataire</th>
+                        <th>Bailleur</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($evenementsRecents as $evenement)
+                        <tr>
+                            <td>{{ $evenement->created_at->format('d/m/Y H:i') }}</td>
+                            <td>
+                                <span class="badge bg-{{ $evenement->couleur }}">
+                                    <i class="fas {{ $evenement->icone }} me-1"></i>
+                                    {{ $evenement->type_libelle }}
+                                </span>
+                            </td>
+                            <td>{{ $evenement->bien->nom ?? '-' }}</td>
+                            <td>{{ $evenement->locataire->nom_complet ?? '-' }}</td>
+                            <td>{{ $evenement->user->name }}</td>
+                            <td>
+                                <a href="{{ route('avocat.evenements.show', $evenement) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">Aucun événement</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+### Liste des événements (Avocat)
+
+```blade
+{{-- resources/views/avocat/evenements/index.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Journal des événements')
+@section('header', 'Journal des événements')
+
+@section('content')
+<div class="card mb-4">
+    <div class="card-body">
+        <form action="{{ route('avocat.evenements.index') }}" method="GET" class="row g-3">
+            <div class="col-md-3">
+                <select class="form-select" name="type">
+                    <option value="">Tous les types</option>
+                    <option value="ajout_bien_location" {{ request('type') == 'ajout_bien_location' ? 'selected' : '' }}>
+                        Ajout de bien en location
+                    </option>
+                    <option value="attribution_locataire" {{ request('type') == 'attribution_locataire' ? 'selected' : '' }}>
+                        Attribution de locataire
+                    </option>
+                    <option value="resiliation_location" {{ request('type') == 'resiliation_location' ? 'selected' : '' }}>
+                        Résiliation de location
+                    </option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <input type="date" class="form-control" name="date_debut" 
+                       placeholder="Date début" value="{{ request('date_debut') }}">
+            </div>
+            <div class="col-md-3">
+                <input type="date" class="form-control" name="date_fin" 
+                       placeholder="Date fin" value="{{ request('date_fin') }}">
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-search me-1"></i> Filtrer
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Date & Heure</th>
+                    <th>Type d'événement</th>
+                    <th>Description</th>
+                    <th>Bien concerné</th>
+                    <th>Locataire</th>
+                    <th>Bailleur</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse($evenements as $evenement)
+                    <tr>
+                        <td>
+                            <span class="fw-semibold">{{ $evenement->created_at->format('d/m/Y') }}</span><br>
+                            <small class="text-muted">{{ $evenement->created_at->format('H:i') }}</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-{{ $evenement->couleur }}">
+                                <i class="fas {{ $evenement->icone }} me-1"></i>
+                                {{ $evenement->type_libelle }}
+                            </span>
+                        </td>
+                        <td>{{ Str::limit($evenement->description, 50) }}</td>
+                        <td>{{ $evenement->bien->nom ?? '-' }}</td>
+                        <td>{{ $evenement->locataire->nom_complet ?? '-' }}</td>
+                        <td>{{ $evenement->user->name }}</td>
+                        <td>
+                            <a href="{{ route('avocat.evenements.show', $evenement) }}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-eye me-1"></i> Détails
+                            </a>
+                        </td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">Aucun événement trouvé</td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="d-flex justify-content-center mt-4">
+    {{ $evenements->withQueryString()->links() }}
+</div>
+@endsection
+```
+
+### Détail d'un événement (Avocat)
+
+```blade
+{{-- resources/views/avocat/evenements/show.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Détail de l\'événement')
+@section('header', 'Détail de l\'événement')
+
+@section('content')
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header bg-white">
+                <span class="badge bg-{{ $evenement->couleur }} fs-6">
+                    <i class="fas {{ $evenement->icone }} me-1"></i>
+                    {{ $evenement->type_libelle }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="text-muted small">Date et heure</label>
+                        <p class="mb-0 fw-semibold">{{ $evenement->created_at->format('d/m/Y à H:i') }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-muted small">Bailleur concerné</label>
+                        <p class="mb-0 fw-semibold">{{ $evenement->user->name }}</p>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-muted small">Description</label>
+                    <p class="mb-0">{{ $evenement->description }}</p>
+                </div>
+
+                @if($evenement->donnees_supplementaires)
+                    <div class="mb-3">
+                        <label class="text-muted small">Données supplémentaires</label>
+                        <div class="bg-light rounded p-3">
+                            <pre class="mb-0">{{ json_encode($evenement->donnees_supplementaires, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+                        </div>
+                    </div>
+                @endif
+            </div>
+        </div>
+
+        @if($evenement->bien)
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Bien concerné</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="text-muted small">Nom du bien</label>
+                            <p class="mb-2 fw-semibold">{{ $evenement->bien->nom }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Type</label>
+                            <p class="mb-2">{{ $evenement->bien->typeBien->nom }}</p>
+                        </div>
+                        <div class="col-12">
+                            <label class="text-muted small">Localisation</label>
+                            <p class="mb-0">{{ $evenement->bien->adresse_complete }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if($evenement->locataire)
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Locataire concerné</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="text-muted small">Nom complet</label>
+                            <p class="mb-2 fw-semibold">{{ $evenement->locataire->nom_complet }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Téléphone</label>
+                            <p class="mb-2">{{ $evenement->locataire->telephone }}</p>
+                        </div>
+                        @if($evenement->locataire->email)
+                            <div class="col-md-6">
+                                <label class="text-muted small">Email</label>
+                                <p class="mb-2">{{ $evenement->locataire->email }}</p>
+                            </div>
+                        @endif
+                        @if($evenement->locataire->piece_identite_numero)
+                            <div class="col-md-6">
+                                <label class="text-muted small">Pièce d'identité</label>
+                                <p class="mb-0">{{ ucfirst($evenement->locataire->piece_identite_type) }} - {{ $evenement->locataire->piece_identite_numero }}</p>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        @endif
+    </div>
+
+    <div class="col-lg-4">
+        @if($evenement->location && $evenement->location->documents->count() > 0)
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Documents associés</h5>
+                </div>
+                <div class="card-body">
+                    @foreach($evenement->location->documents as $document)
+                        <div class="d-flex justify-content-between align-items-center py-2 {{ !$loop->last ? 'border-bottom' : '' }}">
+                            <div>
+                                <p class="mb-0 fw-semibold">{{ $document->type_libelle }}</p>
+                                <small class="text-muted">{{ $document->nom_original }}</small>
+                            </div>
+                            <a href="{{ Storage::url($document->chemin_fichier) }}" 
+                               target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
+        <div class="card mt-4">
+            <div class="card-body">
+                <a href="{{ route('avocat.evenements.index') }}" class="btn btn-outline-secondary w-100">
+                    <i class="fas fa-arrow-left me-1"></i> Retour à la liste
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+### Gestion des types de biens (Admin)
+
+```blade
+{{-- resources/views/admin/types-biens/index.blade.php --}}
+
+@extends('layouts.app')
+
+@section('title', 'Types de biens')
+@section('header', 'Gestion des types de biens')
+
+@section('content')
+<div class="d-flex justify-content-end mb-3">
+    <a href="{{ route('admin.types-biens.create') }}" class="btn btn-primary">
+        <i class="fas fa-plus me-1"></i> Ajouter un type
+    </a>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Nom</th>
+                    <th>Catégorie</th>
+                    <th>Nécessite une adresse</th>
+                    <th>Nombre de biens</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse($typesBiens as $type)
+                    <tr>
+                        <td class="fw-semibold">{{ $type->nom }}</td>
+                        <td>
+                            <span class="badge bg-{{ $type->categorie === 'immobilier' ? 'primary' : 'secondary' }}">
+                                {{ ucfirst($type->categorie) }}
+                            </span>
+                        </td>
+                        <td>
+                            @if($type->necessite_adresse)
+                                <i class="fas fa-check text-success"></i>
+                            @else
+                                <i class="fas fa-times text-muted"></i>
+                            @endif
+                        </td>
+                        <td>{{ $type->biens_count }}</td>
+                        <td>
+                            @if($type->actif)
+                                <span class="badge bg-success">Actif</span>
+                            @else
+                                <span class="badge bg-danger">Inactif</span>
+                            @endif
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ route('admin.types-biens.edit', $type) }}" 
+                                   class="btn btn-outline-primary">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                @if($type->biens_count === 0)
+                                    <form action="{{ route('admin.types-biens.destroy', $type) }}" 
+                                          method="POST" class="d-inline"
+                                          onsubmit="return confirm('Confirmer la suppression ?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-outline-danger">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                @endif
+                            </div>
+                        </td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-muted">Aucun type de bien</td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+@endsection
+```
+
+---
+
+## Résumé
+
+Ce système complet comprend les éléments suivants pour une application Laravel de gestion de biens immobiliers et mobiliers.
+
+Les migrations créent les tables nécessaires pour les utilisateurs avec leurs rôles, les types de biens paramétrables, les biens avec leurs caractéristiques et localisations, les locataires avec leurs informations personnelles, les locations qui lient biens et locataires, les documents attachés aux locations notamment les contrats de bail, et les événements qui constituent le journal pour l'avocat.
+
+Les modèles définissent les relations Eloquent entre toutes les entités avec les attributs calculés et les scopes de requêtes fréquentes.
+
+Les contrôleurs gèrent l'authentification et la redirection selon les rôles, le CRUD complet des biens pour le bailleur, l'attribution et la résiliation des locataires avec upload de documents, la consultation du journal des événements par l'avocat, et l'administration des types de biens.
+
+Les routes sont organisées par rôle avec un middleware de vérification d'accès.
+
+Les vues utilisent Bootstrap 5 avec un layout responsive, une sidebar adaptée à chaque rôle, et des formulaires complets incluant la capture photo pour les contrats.
