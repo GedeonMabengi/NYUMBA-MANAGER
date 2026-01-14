@@ -17,7 +17,7 @@
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
                     <a href="/" class="text-xl font-bold text-indigo-600">
-                        <i class="fas fa-building mr-2"></i>GestImmo
+                        <i class="fas fa-building mr-2"></i>NYUMBA-MANAGER
                     </a>
                     
                     @auth
@@ -129,7 +129,7 @@
 
     <footer class="bg-white border-t mt-auto py-6">
         <div class="max-w-7xl mx-auto px-4 text-center text-gray-500">
-            &copy; {{ date('Y') }} GestImmo - Système de Gestion Immobilière
+            &copy; {{ date('Y') }} NYUMBA-MANAGER - Système de Gestion Immobilière
         </div>
     </footer>
 

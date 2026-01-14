@@ -36,7 +36,7 @@ class RentalCreatedNotification extends Notification implements ShouldQueue
             ->line('**Bien :** ' . $property->name)
             ->line('**Locataire :** ' . $tenant->full_name)
             ->line('**Date de début :** ' . $this->rental->start_date->format('d/m/Y'))
-            ->line('**Loyer :** ' . number_format($this->rental->rent_amount, 2, ',', ' ') . ' €')
+            ->line('**Loyer :** ' . number_format($this->rental->rent_amount, 2, ',', ' ') . ' $')
             ->action('Voir le contrat', url('/avocat/bailleurs/' . $this->bailleur->id . '/rentals'))
             ->line('Un contrat de bail a été uploadé dans le système.');
     }

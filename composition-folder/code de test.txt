@@ -44,15 +44,15 @@ Excellent ! Oui, absolument. Voici les identifiants de test que j'ai inclus dans
 
 ### **Locations actives pour tester :**
 1. **Thomas Leroy** locataire de l'**Appartement T3 Paris 15ème**
-   - Loyer: 1250€/mois
+   - Loyer: 1250$/mois
    - Contrat actif jusqu'au 31/12/2025
 
 2. **Antoine Petit** locataire de la **Maison Versailles**
-   - Loyer: 1800€/mois
+   - Loyer: 1800$/mois
    - Contrat actif jusqu'au 31/05/2024
 
 3. **Marie Moreau** locataire du **Studio étudiant Lyon**
-   - Loyer: 550€/mois
+   - Loyer: 550$/mois
    - Contrat étudiant jusqu'au 31/07/2024
 
 ### **Documents disponibles :**

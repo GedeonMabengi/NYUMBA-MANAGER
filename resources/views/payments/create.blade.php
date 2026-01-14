@@ -46,7 +46,7 @@
                                 data-tenant="{{ $rental->tenant->first_name }} {{ $rental->tenant->last_name }}"
                                 data-rent="{{ $rental->rent_amount }}">
                             {{ $rental->property->name }} - {{ $rental->tenant->first_name }} {{ $rental->tenant->last_name }}
-                            ({{ number_format($rental->rent_amount, 2, ',', ' ') }} €/mois)
+                            ({{ number_format($rental->rent_amount, 2, ',', ' ') }} $/mois)
                         </option>
                     @endforeach
                 </select>
@@ -124,7 +124,7 @@
                                step="0.01" min="0.01" placeholder="0.00"
                                class="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-12 @error('amount') border-red-500 @enderror">
                         <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <span class="text-gray-500">€</span>
+                            <span class="text-gray-500">$</span>
                         </div>
                     </div>
                     @error('amount')
@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const rent = selectedOption.dataset.rent;
             
             tenantName.textContent = tenant;
-            rentAmount.textContent = parseFloat(rent).toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' €';
+            rentAmount.textContent = parseFloat(rent).toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' $';
             rentalInfo.classList.remove('hidden');
             
             // Pré-remplir le nom du payeur avec le nom du locataire si vide

@@ -16,9 +16,12 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
-                    <a href="/" class="text-xl font-bold text-indigo-600">
-                        <i class="fas fa-building mr-2"></i>GestImmo
-                    </a>
+                    <div class="flex justify-center items-center space-x-3 mb-4">
+                        <div class="w-12 h-12 rounded-lg flex items-center justify-center glass-effect">
+                            <i class="fas fa-home text-purple-600 text-2xl"></i>
+                        </div>
+                            <h1 class="text-3xl font-bold logo-text">NYUMBA MANAGER</h1>
+                        </div>
                     
                     @auth
                         <div class="hidden md:flex ml-10 space-x-4">

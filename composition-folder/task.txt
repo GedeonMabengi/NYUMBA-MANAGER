@@ -1,0 +1,5 @@
+Gerer les devises (50%)
+ameliorer la facture (100%)
+interface pour le locataire (0%)
+formulaire ajout bien et locatioon (100%)
+adapter l'interface directement pour le client. (50%)

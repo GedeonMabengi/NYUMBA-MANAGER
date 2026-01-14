@@ -113,13 +113,13 @@
                                class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
                     </div>
                     <div>
-                        <label for="rent_amount" class="block text-gray-700 font-medium mb-2">Loyer (€) *</label>
+                        <label for="rent_amount" class="block text-gray-700 font-medium mb-2">Loyer ($) *</label>
                         <input type="number" step="0.01" name="rent_amount" id="rent_amount" 
                                value="{{ old('rent_amount') }}" required
                                class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
                     </div>
                     <div>
-                        <label for="deposit_amount" class="block text-gray-700 font-medium mb-2">Dépôt de garantie (€)</label>
+                        <label for="deposit_amount" class="block text-gray-700 font-medium mb-2">Dépôt de garantie ($)</label>
                         <input type="number" step="0.01" name="deposit_amount" id="deposit_amount" 
                                value="{{ old('deposit_amount') }}"
                                class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">

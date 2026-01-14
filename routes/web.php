@@ -29,7 +29,7 @@ use App\Http\Controllers\DocumentController;
 // })->name('home');
 
 Route::get('/', function () {
-    return view('welcome');
+    return view('auth.login');
 })->name('home');
 
 /*

@@ -1,4 +1,4 @@
-@extends('layouts.bailleur')
+@extends('layouts.app')
 
 @section('title', $property->name)
 

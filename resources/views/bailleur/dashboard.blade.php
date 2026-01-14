@@ -92,10 +92,10 @@
         <i class="fas fa-plus-circle text-2xl mr-3"></i>
         <span class="text-lg font-medium">Ajouter un payment</span>
     </a>
-    <a href="{{ route('bailleur.avocats.create') }}" 
+    <a href="{{ route('payments.index') }}" 
        class="bg-purple-600 text-white rounded-lg p-6 hover:bg-purple-700 transition flex items-center justify-center">
         <i class="fas fa-user-tie text-2xl mr-3"></i>
-        <span class="text-lg font-medium">Associer un avocat</span>
+        <span class="text-lg font-medium">Mes paiements</span>
     </a>
 </div>
 
@@ -163,7 +163,7 @@
                                     </p>
                                 </div>
                                 <span class="text-indigo-600 font-medium">
-                                    {{ number_format($rental->rent_amount, 0, ',', ' ') }} €/mois
+                                    {{ number_format($rental->rent_amount, 0, ',', ' ') }} $/mois
                                 </span>
                             </div>
                         </a>

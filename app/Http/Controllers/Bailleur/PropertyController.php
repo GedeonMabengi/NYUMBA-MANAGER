@@ -61,12 +61,12 @@ class PropertyController extends Controller
         if ($propertyType->requires_address) {
             $rules['address'] = ['required', 'string', 'max:255'];
             $rules['city'] = ['required', 'string', 'max:255'];
-            $rules['postal_code'] = ['required', 'string', 'max:20'];
+            // $rules['postal_code'] = ['required', 'string', 'max:20'];
             $rules['country'] = ['nullable', 'string', 'max:255'];
         } else {
             $rules['address'] = ['nullable', 'string', 'max:255'];
             $rules['city'] = ['nullable', 'string', 'max:255'];
-            $rules['postal_code'] = ['nullable', 'string', 'max:20'];
+            // $rules['postal_code'] = ['nullable', 'string', 'max:20'];
             $rules['country'] = ['nullable', 'string', 'max:255'];
         }
 
@@ -123,7 +123,7 @@ class PropertyController extends Controller
         if ($propertyType->requires_address) {
             $rules['address'] = ['required', 'string', 'max:255'];
             $rules['city'] = ['required', 'string', 'max:255'];
-            $rules['postal_code'] = ['required', 'string', 'max:20'];
+            // $rules['postal_code'] = ['required', 'string', 'max:20'];
             $rules['country'] = ['nullable', 'string', 'max:255'];
         }
 

@@ -29,7 +29,7 @@
                 </div>
                 <div class="ml-4">
                     <p class="text-sm font-medium text-gray-500">Total perçu</p>
-                    <p class="text-2xl font-bold text-gray-900">{{ number_format($stats['total_amount'], 2, ',', ' ') }} €</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ number_format($stats['total_amount'], 2, ',', ' ') }} $</p>
                 </div>
             </div>
         </div>
@@ -40,7 +40,7 @@
                 </div>
                 <div class="ml-4">
                     <p class="text-sm font-medium text-gray-500">Ce mois-ci</p>
-                    <p class="text-2xl font-bold text-gray-900">{{ number_format($stats['this_month'], 2, ',', ' ') }} €</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ number_format($stats['this_month'], 2, ',', ' ') }} $</p>
                 </div>
             </div>
         </div>
